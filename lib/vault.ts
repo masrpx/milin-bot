@@ -1,4 +1,7 @@
 import { Octokit } from "@octokit/rest";
+import Anthropic from "@anthropic-ai/sdk";
+
+const anthropic = new Anthropic();
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 const OWNER = process.env.GITHUB_OWNER!;
@@ -88,12 +91,14 @@ export async function searchVault(query: string): Promise<string[]> {
 
     const allMdFiles = treeRes.data.tree
       .filter((f) => f.path?.endsWith(".md") && f.type === "blob")
-      .map((f) => f.path!);
+      .map((f) => f.path!)
+      .filter((p) => !p.startsWith("05 Milin/"));
 
     const STOP_WORDS = new Set([
       "หา", "ค้นหา", "บอก", "สรุป", "อธิบาย", "แนะนำ", "เรื่อง",
       "ที่", "ของ", "และ", "หรือ", "ใน", "จาก", "มี", "ไหม",
       "ช่วย", "มา", "ให้", "ไว้", "แล้ว", "จด", "ว่า", "note",
+      "folder", "อะไรก็ได้", "ทั้งหมด",
     ]);
 
     const queryWords = query
@@ -101,36 +106,40 @@ export async function searchVault(query: string): Promise<string[]> {
       .map((w) => w.trim().toLowerCase())
       .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
 
-    // Score each file path by how many query words appear in it
+    // Step 1: path keyword scoring (works for English terms like "projects", "finance")
     const scored = allMdFiles
-      .filter((p) => !p.startsWith("05 Milin/"))
       .map((path) => ({
         path,
-        score: queryWords.filter((word) => path.toLowerCase().includes(word))
-          .length,
+        score: queryWords.filter((word) => path.toLowerCase().includes(word)).length,
       }))
       .filter((f) => f.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
 
-    // Fallback: recent inbox files for content-level matches
-    const recentInbox = allMdFiles
-      .filter((p) => p.startsWith("00 Inbox/"))
-      .slice(-5);
+    // Step 2: if path scoring found nothing, use Claude to map Thai query → file paths
+    // (e.g. "การเงิน" → finds "CFP Certification.md", "Investing.md")
+    let candidatePaths: string[];
+    if (scored.length === 0) {
+      candidatePaths = await pickFilesWithClaude(query, allMdFiles);
+    } else {
+      candidatePaths = scored.map((f) => f.path);
+    }
 
-    const scoredPaths = new Set(scored.map((f) => f.path));
-    const candidates = [
-      ...scored.map((f) => f.path),
-      ...recentInbox.filter((p) => !scoredPaths.has(p)),
+    // Step 3: also check recent inbox files for content-level matches
+    const inboxFiles = allMdFiles.filter((p) => p.startsWith("00 Inbox/")).slice(-5);
+    const candidateSet = new Set(candidatePaths);
+    const toRead = [
+      ...candidatePaths,
+      ...inboxFiles.filter((p) => !candidateSet.has(p)),
     ].slice(0, 8);
 
     const results: string[] = [];
-    for (const path of candidates) {
+    for (const path of toRead) {
       const file = await getFile(path);
       if (!file) continue;
 
-      // For inbox fallbacks, only include if the content actually matches
-      if (!scoredPaths.has(path)) {
+      // For inbox additions, only include if content actually matches
+      if (!candidateSet.has(path)) {
         const lower = file.content.toLowerCase();
         if (!queryWords.some((w) => lower.includes(w))) continue;
       }
@@ -141,6 +150,32 @@ export async function searchVault(query: string): Promise<string[]> {
     return results;
   } catch (err) {
     console.error("searchVault error:", err);
+    return [];
+  }
+}
+
+async function pickFilesWithClaude(
+  query: string,
+  files: string[]
+): Promise<string[]> {
+  try {
+    const fileList = files.slice(0, 300).join("\n");
+
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      messages: [
+        {
+          role: "user",
+          content: `Vault file list:\n${fileList}\n\nUser query: "${query}"\n\nWhich 3-5 files most likely contain the answer? Consider Thai-English equivalences (การเงิน=Finance/CFP/Investing, ธุรกิจ=Business, สุขภาพ=Health/Biohacking, etc.).\nReturn JSON only: ["path1", "path2"]\nIf none match, return: []`,
+        },
+      ],
+    });
+
+    const raw = res.content[0].type === "text" ? res.content[0].text : "[]";
+    const picks: string[] = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || "[]");
+    return picks.filter((p) => files.includes(p)).slice(0, 5);
+  } catch {
     return [];
   }
 }
