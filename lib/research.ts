@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import axios from "axios";
+import * as cheerio from "cheerio";
 import Parser from "rss-parser";
 import {
   getMilinMemory,
@@ -10,9 +12,27 @@ const client = new Anthropic();
 const rssParser = new Parser();
 
 const DEFAULT_RSS_FEEDS = [
-  "https://waitbutwhy.com/feed",
-  "https://fs.blog/feed/",
-  "https://www.dhammatalks.org/rss.xml",
+  // Biohacking / Longevity
+  "https://peterattiamd.com/feed",
+  "https://www.foundmyfitness.com/feed",
+  "https://lifespan.io/feed",
+  "https://www.hubermanlab.com/feed",
+  // Investing / Finance
+  "https://advisors.vanguard.com/insights/rss",
+  "https://blogs.cfainstitute.org/investor/feed",
+  "https://www.morningstar.com/rss/articles",
+  "https://www.valuewalk.com/feed",
+  // Thailand Business
+  "https://www.bangkokpost.com/rss/data/business.xml",
+  "https://thailand-business-news.com/feed",
+  "https://thaicapitalist.com/feed",
+  // AI / Tech
+  "https://hnrss.org/frontpage",
+  "https://bensbites.beehiiv.com/feed",
+  "https://techcrunch.com/feed",
+  // Philosophy / Mindset
+  "https://fs.blog/feed",
+  "https://aeon.co/feed.rss",
 ];
 
 async function fetchRssItems(
@@ -39,48 +59,82 @@ async function fetchRssItems(
   }
 }
 
+async function fetchFullArticle(url: string): Promise<string> {
+  try {
+    const { data: html } = await axios.get(url, {
+      timeout: 10000,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; MilinBot/1.0)" },
+    });
+    const $ = cheerio.load(html);
+    $("script, style, nav, header, footer, aside, .ad, .ads, .advertisement").remove();
+    const selectors = ["article", "main", ".content", ".post-content", "#content", "body"];
+    for (const sel of selectors) {
+      const text = $(sel).text().replace(/\s+/g, " ").trim();
+      if (text.length > 300) return text.slice(0, 6000);
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 async function scoreAndCreateNote(
   title: string,
-  content: string,
-  source: string,
+  snippet: string,
+  url: string,
   sourceType: KnowledgeItem["sourceType"],
   interests: string[]
 ): Promise<KnowledgeItem | null> {
-  const prompt = `Rate the relevance of this content for Max (1-10) and create an atomic note if score >= 7.
+  // Step 1: quick relevance score on snippet (cheap)
+  const quickPrompt = `Score relevance 1-10 for Max's interests: ${interests.slice(0, 7).join(", ")}
+Title: ${title}
+Snippet: ${snippet.slice(0, 400)}
+Return JSON only: {"score": 7}
+If clearly irrelevant return: {"score": 0}`;
+
+  const quickRes = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 30,
+    messages: [{ role: "user", content: quickPrompt }],
+  });
+  const quickRaw = quickRes.content[0].type === "text" ? quickRes.content[0].text : "{}";
+  const quickScore = JSON.parse(quickRaw.match(/\{[\s\S]*\}/)?.[0] || "{}").score || 0;
+  if (quickScore < 6) return null;
+
+  // Step 2: fetch full article for items that passed
+  const fullText = await fetchFullArticle(url);
+  const content = fullText.length > 300 ? fullText : snippet;
+
+  // Step 3: summarize from full content
+  const prompt = `Summarize this article as an atomic note for Max's Obsidian vault.
 
 Max's interests: ${interests.join(", ")}
 
 Title: ${title}
-Content: ${content.slice(0, 1500)}
+Content: ${content.slice(0, 5000)}
 
 Return JSON only:
 {
-  "score": 8,
-  "summary": "2-3 sentence summary",
+  "summary": "3-5 sentence substantive summary with key insights",
   "suggestedVaultPath": "04 Resources/Biohacking",
-  "relevanceReason": "why Max would care"
-}
-
-If score < 6, return: {"score": 0}`;
+  "relevanceReason": "specific reason Max would care"
+}`;
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 400,
+    model: "claude-sonnet-4-6",
+    max_tokens: 500,
     messages: [{ role: "user", content: prompt }],
   });
 
   const raw =
     response.content[0].type === "text" ? response.content[0].text : "{}";
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  const result = JSON.parse(jsonMatch?.[0] || "{}");
-
-  if (!result.score || result.score < 6) return null;
+  const result = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || "{}");
 
   return {
     title,
-    source,
+    source: url,
     sourceType,
-    summary: result.summary || "",
+    summary: result.summary || snippet.slice(0, 300),
     suggestedVaultPath: result.suggestedVaultPath || "00 Inbox",
     relevanceReason: result.relevanceReason || "",
     approved: false,
@@ -118,12 +172,12 @@ export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
     }
   }
 
-  // Score and filter
-  const scored = await Promise.all(
-    rawFindings.map((f) =>
-      scoreAndCreateNote(f.title, f.content, f.source, f.type, interests)
-    )
-  );
+  // Score, fetch full article, and summarize (sequential to avoid hammering servers)
+  const scored: (KnowledgeItem | null)[] = [];
+  for (const f of rawFindings) {
+    const item = await scoreAndCreateNote(f.title, f.content, f.source, f.type, interests);
+    scored.push(item);
+  }
 
   const filtered = scored
     .filter((item): item is KnowledgeItem => item !== null)
