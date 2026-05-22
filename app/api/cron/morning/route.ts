@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { pushMessage } from "@/lib/line";
 import { getKnowledgeQueue } from "@/lib/vault";
 
-function getYesterday(): string {
+function getDateOffset(days: number): string {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
+  d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
 }
 
@@ -21,8 +21,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const yesterday = getYesterday();
-    const items = await getKnowledgeQueue(yesterday);
+    // Check today first (for manual testing), then yesterday (production: research runs ~7h before morning)
+    let items = await getKnowledgeQueue(getDateOffset(0));
+    if (items.length === 0) items = await getKnowledgeQueue(getDateOffset(-1));
 
     if (items.length === 0) {
       const greeting = MORNING_GREETINGS[Math.floor(Math.random() * MORNING_GREETINGS.length)];

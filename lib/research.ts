@@ -1,10 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import axios from "axios";
 import Parser from "rss-parser";
-import * as cheerio from "cheerio";
 import {
   getMilinMemory,
-  getVaultMOCs,
   saveToKnowledgeQueue,
   type KnowledgeItem,
 } from "./vault";
@@ -18,74 +15,19 @@ const DEFAULT_RSS_FEEDS = [
   "https://www.dhammatalks.org/rss.xml",
 ];
 
-async function generateResearchQueries(
-  interests: string[],
-  vaultContext: string
-): Promise<string[]> {
-  const prompt = `Based on Max's interests and vault context, suggest 5 specific research queries for tonight.
-
-Max's interests: ${interests.join(", ")}
-Recent vault context:
-${vaultContext.slice(0, 2000)}
-
-Return ONLY a JSON array of 5 query strings, nothing else:
-["query 1", "query 2", ...]`;
-
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 300,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const raw =
-    response.content[0].type === "text" ? response.content[0].text : "[]";
-  const jsonMatch = raw.match(/\[[\s\S]*\]/);
-  return JSON.parse(jsonMatch?.[0] || "[]");
-}
-
-async function searchPerplexity(query: string): Promise<string> {
-  if (!process.env.PERPLEXITY_API_KEY) return "";
-
-  try {
-    const response = await axios.post(
-      "https://api.perplexity.ai/chat/completions",
-      {
-        model: "sonar",
-        messages: [
-          {
-            role: "user",
-            content: query,
-          },
-        ],
-        max_tokens: 800,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 15000,
-      }
-    );
-    return response.data?.choices?.[0]?.message?.content || "";
-  } catch {
-    return "";
-  }
-}
-
 async function fetchRssItems(
   feedUrl: string
 ): Promise<{ title: string; link: string; content: string; pubDate: string }[]> {
   try {
     const feed = await rssParser.parseURL(feedUrl);
-    const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
     return feed.items
       .filter((item) => {
         if (!item.pubDate) return true;
-        return new Date(item.pubDate).getTime() > threeDaysAgo;
+        return new Date(item.pubDate).getTime() > fourteenDaysAgo;
       })
-      .slice(0, 5)
+      .slice(0, 8)
       .map((item) => ({
         title: item.title || "",
         link: item.link || feedUrl,
@@ -119,7 +61,7 @@ Return JSON only:
   "relevanceReason": "why Max would care"
 }
 
-If score < 7, return: {"score": 0}`;
+If score < 6, return: {"score": 0}`;
 
   const response = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
@@ -132,7 +74,7 @@ If score < 7, return: {"score": 0}`;
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   const result = JSON.parse(jsonMatch?.[0] || "{}");
 
-  if (!result.score || result.score < 7) return null;
+  if (!result.score || result.score < 6) return null;
 
   return {
     title,
@@ -147,7 +89,6 @@ If score < 7, return: {"score": 0}`;
 
 export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
   const memory = await getMilinMemory();
-  const vaultContext = await getVaultMOCs();
 
   const interests = [
     "Dhamma",
@@ -160,24 +101,7 @@ export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
     ...memory.aboutMax,
   ];
 
-  const queries = await generateResearchQueries(interests, vaultContext);
-
   const rawFindings: { title: string; content: string; source: string; type: KnowledgeItem["sourceType"] }[] = [];
-
-  // Perplexity web search
-  await Promise.all(
-    queries.map(async (query) => {
-      const result = await searchPerplexity(query);
-      if (result) {
-        rawFindings.push({
-          title: query,
-          content: result,
-          source: "Perplexity Web Search",
-          type: "web",
-        });
-      }
-    })
-  );
 
   // RSS feeds
   const allRssItems = await Promise.all(
