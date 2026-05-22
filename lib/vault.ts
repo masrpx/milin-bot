@@ -76,10 +76,13 @@ async function deleteFile(path: string): Promise<void> {
 
 export async function searchVault(query: string): Promise<string[]> {
   try {
+    const repoRes = await octokit.repos.get({ owner: OWNER, repo: REPO });
+    const branch = repoRes.data.default_branch;
+
     const treeRes = await octokit.git.getTree({
       owner: OWNER,
       repo: REPO,
-      tree_sha: "HEAD",
+      tree_sha: branch,
       recursive: "1",
     });
 
@@ -136,7 +139,8 @@ export async function searchVault(query: string): Promise<string[]> {
     }
 
     return results;
-  } catch {
+  } catch (err) {
+    console.error("searchVault error:", err);
     return [];
   }
 }
