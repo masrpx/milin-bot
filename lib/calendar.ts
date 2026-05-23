@@ -7,6 +7,7 @@ export type CalendarEvent = {
   startISO: string;
   endISO: string;
   description?: string;
+  colorId?: number;
 };
 
 export type TimeSlot = {
@@ -60,6 +61,7 @@ export async function getEvents(
       start: { dateTime?: string; date?: string };
       end: { dateTime?: string; date?: string };
       description?: string;
+      colorId?: string; // Google returns colorId as a string "1"–"11"
     }>;
   };
   if (!data.items) return [];
@@ -69,6 +71,7 @@ export async function getEvents(
     startISO: e.start.dateTime || e.start.date || "",
     endISO: e.end.dateTime || e.end.date || "",
     description: e.description,
+    colorId: e.colorId ? Number(e.colorId) : undefined,
   }));
 }
 
@@ -76,7 +79,8 @@ export async function createEvent(
   title: string,
   startISO: string,
   endISO: string,
-  description?: string
+  description?: string,
+  colorId?: number
 ): Promise<string> {
   const token = await getAccessToken();
   const res = await fetch(
@@ -92,6 +96,7 @@ export async function createEvent(
         start: { dateTime: startISO, timeZone: "Asia/Bangkok" },
         end: { dateTime: endISO, timeZone: "Asia/Bangkok" },
         ...(description ? { description } : {}),
+        ...(colorId !== undefined ? { colorId: String(colorId) } : {}),
       }),
     }
   );
@@ -112,6 +117,8 @@ export async function updateEvent(
   if (changes.endISO !== undefined)
     body.end = { dateTime: changes.endISO, timeZone: "Asia/Bangkok" };
   if (changes.description !== undefined) body.description = changes.description;
+  // Google Calendar API expects colorId as a string "1"–"11"
+  if (changes.colorId !== undefined) body.colorId = String(changes.colorId);
 
   const res = await fetch(
     `${BASE_URL}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${eventId}`,

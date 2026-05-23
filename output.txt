@@ -1,0 +1,8 @@
+◇ injected env (11) from .env.local // tip: ◈ encrypted .env [www.dotenvx.com]
+
+🔐 Open this URL in your browser:
+
+https://accounts.google.com/o/oauth2/v2/auth?client_id=165626489433-f0nekkvo87rntov6he5t4us0gmm1chu7.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A3333%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar&access_type=offline&prompt=consent
+
+⏳ Waiting for authorization on http://localhost:3333...
+

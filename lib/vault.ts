@@ -8,14 +8,18 @@ const OWNER = process.env.GITHUB_OWNER!;
 const REPO = process.env.GITHUB_REPO!;
 
 export interface PendingAction {
-  type: "delete" | "update";
-  eventId: string;
+  type: "delete" | "update" | "create";
+  eventId?: string;      // delete/update only — not yet known for create
   eventTitle: string;
+  startISO?: string;     // create only — event to be created
+  endISO?: string;       // create only
+  description?: string;  // create only
   changes?: {
     title?: string;
     startISO?: string;
     endISO?: string;
     description?: string;
+    colorId?: number;
   };
   expiresAt: string; // ISO — expires after 5 minutes
 }

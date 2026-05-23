@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 import { verifyLineSignature, replyMessage } from "@/lib/line";
-import { getMilinMemory } from "@/lib/vault";
+import { getMilinMemory, updateMilinMemory } from "@/lib/vault";
 import { handleCapture } from "@/lib/handlers/capture";
 import { handleArticle } from "@/lib/handlers/article";
 import { handleConversation } from "@/lib/handlers/conversation";
@@ -8,10 +9,46 @@ import { handleApprove, isApproveCommand } from "@/lib/handlers/approve";
 import {
   handleCalendar,
   handleCalendarConfirm,
-  isCalendarMessage,
+  handleColorReply,
+  hasPendingColorReply,
   isPendingCalendarConfirm,
 } from "@/lib/handlers/calendar";
-import { updateMilinMemory } from "@/lib/vault";
+
+const anthropic = new Anthropic();
+
+// ---------------------------------------------------------------------------
+// Haiku pre-classifier — replaces keyword-based calendar detection.
+// Runs on every message that isn't already caught by a fast-path rule.
+// Returns "calendar" or "chat". Falls back to "chat" on any error.
+// ---------------------------------------------------------------------------
+
+async function classifyMessage(text: string): Promise<"calendar" | "chat"> {
+  try {
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 10,
+      messages: [
+        {
+          role: "user",
+          content: `Classify this Thai message as "calendar" (scheduling, appointments, events, meetings, free time, dates, timetable) or "chat" (everything else).
+
+Message: "${text}"
+
+Reply with ONLY: calendar OR chat`,
+        },
+      ],
+    });
+    const result = res.content[0].type === "text" ? res.content[0].text.trim().toLowerCase() : "chat";
+    return result.includes("calendar") ? "calendar" : "chat";
+  } catch {
+    // Safe default — conversation handler gracefully covers missed calendar messages
+    return "chat";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Message router — priority order matters
+// ---------------------------------------------------------------------------
 
 async function routeMessage(
   text: string,
@@ -21,36 +58,47 @@ async function routeMessage(
   const isLongText = text.length > 500;
   const isCapture = /^จด:/i.test(text.trim());
 
-  // Priority 1: approve commands ("ok 1,2", "skip", "ok ทั้งหมด")
+  // Priority 1: approve commands — "ok 1,2", "skip", "ok ทั้งหมด" (keyword, instant)
   if (isApproveCommand(text)) return handleApprove(text);
 
-  // Priority 2: calendar confirm — "ยืนยัน" with valid pending action
-  if (isPendingCalendarConfirm(text, memory)) {
-    const reply = await handleCalendarConfirm(memory);
-    // If pendingAction expired mid-check, fall through to conversation
+  // Priority 2: user is replying with a color for a pending "create" action.
+  // Must run BEFORE the pre-classifier — a one-word color reply like "แดง" would
+  // otherwise be classified as "chat" and lose the pending context.
+  if (hasPendingColorReply(memory)) {
+    const reply = await handleColorReply(text, memory);
+    // Empty return means the pending expired mid-check — fall through normally
     if (reply) return reply;
   }
 
-  // Clear stale expired pendingAction if one exists but is expired
-  if (
-    memory.pendingAction &&
-    new Date() > new Date(memory.pendingAction.expiresAt)
-  ) {
+  // Priority 3: "ยืนยัน" confirming a pending delete or update
+  if (isPendingCalendarConfirm(text, memory)) {
+    const reply = await handleCalendarConfirm(memory);
+    // Empty return means expired — fall through to conversation
+    if (reply) return reply;
+  }
+
+  // Clear any stale expired pendingAction (fire-and-forget)
+  if (memory.pendingAction && new Date() > new Date(memory.pendingAction.expiresAt)) {
     updateMilinMemory({ pendingAction: undefined }).catch(() => {});
   }
 
-  // Priority 3: calendar keywords
-  if (isCalendarMessage(text)) return handleCalendar(text, memory);
-
-  // Priority 4: explicit capture ("จด:" prefix) — must be before long-text check
+  // Priority 4: explicit capture prefix — must be before long-text check so
+  // long "จด:" notes don't fall into the article handler
   if (isCapture) return handleCapture(text.replace(/^จด:\s*/i, "").trim());
 
-  // Priority 5: URL or long text → article handler
+  // Priority 5: URL or long text → article handler (no LLM needed to detect)
   if (isUrl || isLongText) return handleArticle(text, isUrl);
 
-  // Priority 6: everything else → Milin conversation
+  // Priority 6: Haiku pre-classifier decides calendar vs chat.
+  // Covers natural language that doesn't match any fixed keyword.
+  const category = await classifyMessage(text);
+  if (category === "calendar") return handleCalendar(text, memory);
   return handleConversation(text, memory);
 }
+
+// ---------------------------------------------------------------------------
+// LINE webhook POST handler
+// ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawBody = await req.text();

@@ -10,7 +10,79 @@ import { type MilinMemory, type PendingAction, updateMilinMemory } from "../vaul
 
 const client = new Anthropic();
 
-// --- Intent detection ---
+// ---------------------------------------------------------------------------
+// Color theme — Max's personal Google Calendar color system
+// Google Calendar colorId strings "1"–"11" map to named colors.
+// ---------------------------------------------------------------------------
+
+const COLOR_THEME_DESCRIPTION = `
+Color assignment rules (pick the best match, return null if unsure):
+- 7  (Peacock/ฟ้า): landmark events, milestones, special occasions, travel
+- 6  (Tangerine/ส้ม): BNI, business networking
+- 5  (Banana/เหลือง): clinic, doctor, dentist, hospital, medical appointments
+- 9  (Basil/เขียวเข้ม): exercise, gym, running, swimming, health/fitness activities
+- 11 (Graphite/เทา): factory, manufacturing, production
+- 1  (Lavender/ม่วงอ่อน): personal relationships, family, friends
+- 8  (Blueberry/น้ำเงิน): insurance, finance, banking, money
+- 10 (Tomato/แดง): other work meetings, business, clients
+- null: cannot confidently determine category
+`.trim();
+
+// Map Thai color names (and loose synonyms) the user might reply with → colorId.
+// Used in handleColorReply when asking the user to pick a color.
+const THAI_COLOR_TO_ID: Record<string, number> = {
+  ม่วงอ่อน: 1, lavender: 1,
+  เขียวอ่อน: 2, sage: 2,
+  ม่วง: 3, grape: 3,
+  ชมพู: 4, flamingo: 4, pink: 4,
+  เหลือง: 5, banana: 5, yellow: 5,
+  ส้ม: 6, tangerine: 6, orange: 6,
+  ฟ้า: 7, peacock: 7,
+  น้ำเงิน: 8, blueberry: 8,
+  เขียวเข้ม: 9, basil: 9, เขียว: 9, green: 9,
+  แดง: 10, tomato: 10, red: 10,
+  เทา: 11, graphite: 11, gray: 11, grey: 11,
+};
+
+/** Resolve user's color reply text to a colorId, or null if unrecognised. */
+function resolveColorFromText(text: string): number | null {
+  const normalised = text.trim().toLowerCase();
+  // Exact match first
+  if (THAI_COLOR_TO_ID[normalised] !== undefined) return THAI_COLOR_TO_ID[normalised];
+  // Substring match — user might say "เอาสีแดงเลย" or "ขอน้ำเงินนะ"
+  for (const [key, id] of Object.entries(THAI_COLOR_TO_ID)) {
+    if (normalised.includes(key)) return id;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Pending state helpers
+// ---------------------------------------------------------------------------
+
+/** True when user has a pending color-selection for a not-yet-created event. */
+export function hasPendingColorReply(memory: MilinMemory): boolean {
+  if (!memory.pendingAction) return false;
+  if (memory.pendingAction.type !== "create") return false;
+  return new Date() <= new Date(memory.pendingAction.expiresAt);
+}
+
+/** True when user replies "ยืนยัน" and has a valid non-expired delete/update pending. */
+export function isPendingCalendarConfirm(
+  text: string,
+  memory: MilinMemory
+): boolean {
+  if (text.trim() !== "ยืนยัน") return false;
+  if (!memory.pendingAction) return false;
+  if (memory.pendingAction.type === "create") return false; // handled separately
+  return new Date() <= new Date(memory.pendingAction.expiresAt);
+}
+
+// ---------------------------------------------------------------------------
+// Intent detection — fast keyword check used as a routing hint
+// (The real routing is via Haiku pre-classifier in the webhook; this is kept
+// for legacy compatibility and may be removed later.)
+// ---------------------------------------------------------------------------
 
 const CALENDAR_KEYWORDS_RE =
   /นัด|ตาราง|ว่าง|เจอ|ประชุม|ยกเลิก|เลื่อน|พรุ่งนี้|อาทิตย์นี้|สัปดาห์หน้า|วันนี้มีอะไร/;
@@ -19,18 +91,9 @@ export function isCalendarMessage(text: string): boolean {
   return CALENDAR_KEYWORDS_RE.test(text);
 }
 
-// Check if the message is a confirmation for a pending action
-export function isPendingCalendarConfirm(
-  text: string,
-  memory: MilinMemory
-): boolean {
-  if (text.trim() !== "ยืนยัน") return false;
-  if (!memory.pendingAction) return false;
-  if (new Date() > new Date(memory.pendingAction.expiresAt)) return false;
-  return true;
-}
-
-// --- Date/time parsing via Haiku ---
+// ---------------------------------------------------------------------------
+// Haiku: parse Thai natural language → structured CalendarRequest
+// ---------------------------------------------------------------------------
 
 type CalendarRequest = {
   intent: "read" | "create" | "update" | "delete" | "suggest" | "unknown";
@@ -39,10 +102,10 @@ type CalendarRequest = {
   endISO?: string;
   durationMin?: number;
   targetKeyword?: string;
+  colorId?: number | null; // null = ask user; undefined = not applicable
 };
 
 async function parseCalendarRequest(text: string): Promise<CalendarRequest> {
-  // Current time in ICT
   const nowUTC = new Date();
   const ictOffset = 7 * 60 * 60 * 1000;
   const ictNow = new Date(nowUTC.getTime() + ictOffset);
@@ -54,7 +117,7 @@ async function parseCalendarRequest(text: string): Promise<CalendarRequest> {
   try {
     const res = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      max_tokens: 350,
       messages: [
         {
           role: "user",
@@ -68,10 +131,11 @@ Parse this Thai calendar request and return JSON only:
   "startISO": "ISO datetime with +07:00 offset",
   "endISO": "ISO datetime with +07:00 offset",
   "durationMin": 60,
-  "targetKeyword": "keyword to match existing event title (delete/update only, else null)"
+  "targetKeyword": "keyword to match existing event title (delete/update only, else null)",
+  "colorId": null
 }
 
-Rules:
+Date/time rules:
 - วันนี้=today, พรุ่งนี้=tomorrow, มะรืน=day after tomorrow
 - ศุกร์นี้=coming Friday (if today>=Fri, use next week)
 - อาทิตย์นี้/สัปดาห์นี้=Mon-Sun of current week
@@ -80,13 +144,16 @@ Rules:
 - ครึ่งชั่วโมง=30min, 1 ชั่วโมง=60min
 - read: startISO=day 00:00+07:00, endISO=day 23:59:59+07:00
 - suggest: use the week/day range specified, durationMin from text
-- All times in +07:00 offset`,
+- All times in +07:00 offset
+
+${COLOR_THEME_DESCRIPTION}
+For create intent only: set colorId to the matching number, or null if unsure.
+For all other intents: colorId must be null.`,
         },
       ],
     });
 
-    const raw =
-      res.content[0].type === "text" ? res.content[0].text : "{}";
+    const raw = res.content[0].type === "text" ? res.content[0].text : "{}";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     return JSON.parse(jsonMatch?.[0] || "{}") as CalendarRequest;
   } catch {
@@ -94,13 +161,14 @@ Rules:
   }
 }
 
-// --- Formatting helpers ---
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
 
-/** Format ISO datetime to HH:MM in ICT */
+/** Format ISO datetime to HH:MM in ICT (UTC+7). */
 function formatTime(iso: string): string {
   try {
-    const utcMs = new Date(iso).getTime();
-    const ictMs = utcMs + 7 * 60 * 60 * 1000;
+    const ictMs = new Date(iso).getTime() + 7 * 60 * 60 * 1000;
     const d = new Date(ictMs);
     const h = d.getUTCHours().toString().padStart(2, "0");
     const m = d.getUTCMinutes().toString().padStart(2, "0");
@@ -110,32 +178,25 @@ function formatTime(iso: string): string {
   }
 }
 
-/** Format ISO date to Thai label (วันนี้, พรุ่งนี้, or วัน/dd/mm) */
+/** Format ISO date to a readable Thai-ish label (e.g. "วันศุกร์ 30 พ.ค."). */
 function formatDateLabel(iso: string): string {
   try {
-    const ictOffset = 7 * 60 * 60 * 1000;
-    const ictMs = new Date(iso).getTime() + ictOffset;
-    const ictDate = new Date(ictMs);
-    const dateStr = ictDate.toISOString().split("T")[0];
-
-    const nowICT = new Date(Date.now() + ictOffset);
-    const todayStr = nowICT.toISOString().split("T")[0];
-    const tomorrowStr = new Date(nowICT.getTime() + 86400000)
-      .toISOString()
-      .split("T")[0];
-
-    if (dateStr === todayStr) return "วันนี้";
-    if (dateStr === tomorrowStr) return "พรุ่งนี้";
-
-    const days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
-    return `วัน${days[ictDate.getUTCDay()]} ${ictDate.getUTCDate()}/${ictDate.getUTCMonth() + 1}`;
+    const ictMs = new Date(iso).getTime() + 7 * 60 * 60 * 1000;
+    const d = new Date(ictMs);
+    const dayNames = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"];
+    const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+      "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    return `วัน${dayNames[d.getUTCDay()]} ${d.getUTCDate()} ${monthNames[d.getUTCMonth()]}`;
   } catch {
     return iso;
   }
 }
 
-// --- Main handlers ---
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
 
+/** Main calendar handler — called when Haiku pre-classifier routes to "calendar". */
 export async function handleCalendar(
   text: string,
   _memory: MilinMemory
@@ -150,8 +211,7 @@ export async function handleCalendar(
         }
         const events = await getEvents(req.startISO, req.endISO);
         if (events.length === 0) {
-          const label = formatDateLabel(req.startISO);
-          return `${label} ว่างทั้งวันเลยนะ ไม่มีนัดอะไร~`;
+          return `${formatDateLabel(req.startISO)} ว่างทั้งวันเลยนะ ไม่มีนัดอะไร~`;
         }
         const lines = events
           .map((e) => `• ${formatTime(e.startISO)} — ${e.title}`)
@@ -163,10 +223,26 @@ export async function handleCalendar(
         if (!req.title || !req.startISO || !req.endISO) {
           return "บอกชื่อนัด วันที่ และเวลาด้วยนะ เช่น 'นัด BNI ศุกร์นี้ 9 โมง 1 ชั่วโมง'~";
         }
-        await createEvent(req.title, req.startISO, req.endISO);
+
         const date = formatDateLabel(req.startISO);
         const time = formatTime(req.startISO);
-        return `โอเคนะ จัดให้เลย 📅 ${req.title} ${date} ${time} บันทึกแล้วค่ะ~`;
+
+        // Color known → create immediately
+        if (req.colorId !== null && req.colorId !== undefined) {
+          await createEvent(req.title, req.startISO, req.endISO, undefined, req.colorId);
+          return `โอเคนะ จัดให้เลย 📅 ${req.title} ${date} ${time} บันทึกแล้วค่ะ~`;
+        }
+
+        // Color unknown → store pendingAction and ask
+        const pendingAction: PendingAction = {
+          type: "create",
+          eventTitle: req.title,
+          startISO: req.startISO,
+          endISO: req.endISO,
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        };
+        await updateMilinMemory({ pendingAction });
+        return `จะสร้าง '${req.title}' ${date} ${time} นะ~\nนัดนี้อยู่หมวดไหนคะ บอกสีได้เลย 🎨\n(ม่วงอ่อน/เขียวเข้ม/ฟ้า/เหลือง/ส้ม/เทา/น้ำเงิน/แดง/ม่วง/ชมพู)`;
       }
 
       case "delete": {
@@ -249,7 +325,53 @@ export async function handleCalendar(
   }
 }
 
-/** Called when user replies "ยืนยัน" and there's a valid, non-expired pendingAction */
+/**
+ * Called when user sends a color reply to a pending "create" action.
+ * Resolves the color name → colorId, creates the event, clears pending state.
+ */
+export async function handleColorReply(
+  text: string,
+  memory: MilinMemory
+): Promise<string> {
+  const pending = memory.pendingAction!;
+
+  // Expiry double-check — can't be too careful
+  if (new Date() > new Date(pending.expiresAt)) {
+    await updateMilinMemory({ pendingAction: undefined });
+    // Treat as a fresh message by falling through — return empty so caller handles it
+    return "";
+  }
+
+  const colorId = resolveColorFromText(text);
+
+  if (colorId === null) {
+    // Unrecognised color — ask again, don't clear pending (still valid)
+    return "ไม่แน่ใจสีที่บอกนะ ลองพิมพ์ใหม่ได้มั้ยคะ เช่น แดง เหลือง ส้ม ฟ้า น้ำเงิน เขียวเข้ม เทา ม่วงอ่อน ม่วง ชมพู~";
+  }
+
+  try {
+    await createEvent(
+      pending.eventTitle,
+      pending.startISO!,
+      pending.endISO!,
+      pending.description,
+      colorId
+    );
+    await updateMilinMemory({ pendingAction: undefined });
+    const date = formatDateLabel(pending.startISO!);
+    const time = formatTime(pending.startISO!);
+    return `โอเคนะ จัดให้เลย 📅 ${pending.eventTitle} ${date} ${time} บันทึกแล้วค่ะ~`;
+  } catch (err) {
+    console.error("handleColorReply createEvent error:", err);
+    await updateMilinMemory({ pendingAction: undefined });
+    return "มีบางอย่างผิดพลาดตอนสร้างนัด ลองบอกใหม่ได้เลยนะ~";
+  }
+}
+
+/**
+ * Called when user replies "ยืนยัน" and has a valid non-expired delete/update pending.
+ * Returns "" if pending is expired (caller should fall through to handleConversation).
+ */
 export async function handleCalendarConfirm(
   memory: MilinMemory
 ): Promise<string> {
@@ -263,17 +385,27 @@ export async function handleCalendarConfirm(
 
   try {
     if (pending.type === "delete") {
+      if (!pending.eventId) {
+        await updateMilinMemory({ pendingAction: undefined });
+        return "ไม่เจอ ID ของนัดที่จะลบ ลองบอกใหม่ได้เลยนะ~";
+      }
       await deleteEvent(pending.eventId);
       await updateMilinMemory({ pendingAction: undefined });
       return `ลบ '${pending.eventTitle}' เรียบร้อยแล้วนะ~ 🗑️`;
     }
 
     if (pending.type === "update") {
+      if (!pending.eventId) {
+        await updateMilinMemory({ pendingAction: undefined });
+        return "ไม่เจอ ID ของนัดที่จะอัพเดต ลองบอกใหม่ได้เลยนะ~";
+      }
       await updateEvent(pending.eventId, pending.changes || {});
       await updateMilinMemory({ pendingAction: undefined });
       return `อัพเดต '${pending.eventTitle}' เรียบร้อยแล้วนะ~ ✅`;
     }
 
+    // "create" type shouldn't reach here (handled by handleColorReply), but guard anyway
+    await updateMilinMemory({ pendingAction: undefined });
     return "";
   } catch (err) {
     console.error("handleCalendarConfirm error:", err);
