@@ -32,13 +32,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     const itemLines = items
-      .map(
-        (item, i) =>
-          `${i + 1}. ${item.title}
-   จาก: ${item.source}
-   สรุป: ${item.summary}
-   จะลงใน: ${item.suggestedVaultPath}`
-      )
+      .map((item, i) => {
+        const shortSummary = item.summary.length > 120
+          ? item.summary.slice(0, 120) + "…"
+          : item.summary;
+        const domain = item.source.replace(/^https?:\/\/([^/]+).*/, "$1");
+        return `${i + 1}. ${item.title}\n   📂 ${item.suggestedVaultPath}\n   💡 ${shortSummary}\n   🔗 ${domain}`;
+      })
       .join("\n\n");
 
     const report = `อรุณสวัสดิ์นะ Max~ 🌅

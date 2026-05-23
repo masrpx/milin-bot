@@ -4,10 +4,23 @@ import {
   deleteKnowledgeQueue,
 } from "../vault";
 
-function getYesterday(): string {
+function getDateOffset(days: number): string {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
+  d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
+}
+
+// Match morning cron logic: today first, then yesterday
+async function findQueueDate(): Promise<string | null> {
+  const today = getDateOffset(0);
+  const todayItems = await getKnowledgeQueue(today);
+  if (todayItems.length > 0) return today;
+
+  const yesterday = getDateOffset(-1);
+  const yesterdayItems = await getKnowledgeQueue(yesterday);
+  if (yesterdayItems.length > 0) return yesterday;
+
+  return null;
 }
 
 function parseApproveCommand(text: string): {
@@ -53,12 +66,11 @@ export function isApproveCommand(text: string): boolean {
 }
 
 export async function handleApprove(text: string): Promise<string> {
-  const date = getYesterday();
-  const items = await getKnowledgeQueue(date);
-
-  if (items.length === 0) {
+  const date = await findQueueDate();
+  if (!date) {
     return "ไม่มี notes ที่รอ approve อยู่นะ~";
   }
+  const items = await getKnowledgeQueue(date);
 
   const command = parseApproveCommand(text);
   const approvedTitles: string[] = [];
