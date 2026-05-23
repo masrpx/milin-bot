@@ -15,8 +15,8 @@ async function routeMessage(
   const isCapture = /^จด:/i.test(text.trim());
 
   if (isApproveCommand(text)) return handleApprove(text);
-  if (isUrl || isLongText) return handleArticle(text, isUrl);
   if (isCapture) return handleCapture(text.replace(/^จด:\s*/i, "").trim());
+  if (isUrl || isLongText) return handleArticle(text, isUrl);
   return handleConversation(text, memory);
 }
 
