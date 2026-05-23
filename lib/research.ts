@@ -110,13 +110,20 @@ If clearly irrelevant return: {"score": 0}`;
 
 Max's interests: ${interests.join(", ")}
 
+Vault structure (PARA method):
+- 01 Projects
+- 02 Areas
+- 03 Resources/Biohacking, 03 Resources/Finance, 03 Resources/AI, 03 Resources/Psychology, 03 Resources/Business, 03 Resources/Dhamma, 03 Resources/Gaming
+- 04 Archives
+- 05 Milin (bot only, never use this)
+
 Title: ${title}
 Content: ${content.slice(0, 5000)}
 
 Return JSON only:
 {
   "summary": "3-5 sentence substantive summary with key insights",
-  "suggestedVaultPath": "04 Resources/Biohacking",
+  "suggestedVaultPath": "03 Resources/Biohacking",
   "relevanceReason": "specific reason Max would care"
 }`;
 

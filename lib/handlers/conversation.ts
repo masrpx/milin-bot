@@ -1,9 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import {
-  getMilinMemory,
-  updateMilinMemory,
-  type MilinMemory,
-} from "../vault";
+import { searchVault, updateMilinMemory, type MilinMemory } from "../vault";
 import {
   buildMilinSystemPrompt,
   buildMemoryExtractPrompt,
@@ -12,24 +8,37 @@ import {
 
 const client = new Anthropic();
 
-export async function handleChat(
+// Internal — not used for routing, only to decide if vault search is worth doing
+const NEEDS_VAULT = [
+  "?", "ใคร", "อะไร", "ยังไง", "ทำไม", "เมื่อไหร่", "ที่ไหน",
+  "หา", "ค้นหา", "สรุป", "บอก", "อธิบาย", "แนะนำ", "มีไหม", "ช่วย", "เรื่อง",
+];
+
+export async function handleConversation(
   text: string,
   memory: MilinMemory
 ): Promise<string> {
+  const shouldSearchVault = NEEDS_VAULT.some((t) => text.includes(t));
+
+  const vaultResults = shouldSearchVault ? await searchVault(text) : [];
+  const vaultContext = vaultResults.length
+    ? vaultResults.join("\n\n---\n\n")
+    : undefined;
+
+  // Inject last 5 important conversations as additional context
   const recentConvos = memory.importantConversations
     .slice(-5)
     .map((c) => `${c.date}: ${c.summary}`)
     .join("\n");
-
   const contextNote = recentConvos
     ? `\n\n## บทสนทนาล่าสุด\n${recentConvos}`
     : "";
 
-  const systemPrompt = buildMilinSystemPrompt(memory) + contextNote;
+  const systemPrompt = buildMilinSystemPrompt(memory, vaultContext) + contextNote;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 400,
+    max_tokens: 800,
     system: systemPrompt,
     messages: [{ role: "user", content: text }],
   });
@@ -37,7 +46,8 @@ export async function handleChat(
   const reply =
     response.content[0].type === "text" ? response.content[0].text : "";
 
-  updateMemoryAsync(text, reply, memory).catch(() => {});
+  // Always update memory — both emotional and knowledge conversations matter
+  updateMemoryAsync(text, reply, memory, shouldSearchVault).catch(() => {});
 
   return reply;
 }
@@ -45,10 +55,15 @@ export async function handleChat(
 async function updateMemoryAsync(
   userMessage: string,
   aiResponse: string,
-  currentMemory: MilinMemory
+  currentMemory: MilinMemory,
+  wasVaultQuery: boolean
 ): Promise<void> {
   try {
-    const extractPrompt = buildMemoryExtractPrompt(userMessage, aiResponse);
+    const extractPrompt = buildMemoryExtractPrompt(
+      userMessage,
+      aiResponse,
+      wasVaultQuery
+    );
 
     const extractResponse = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -70,16 +85,18 @@ async function updateMemoryAsync(
     if (extract.newFacts?.length) updates.aboutMax = extract.newFacts;
     if (extract.newPreferences?.length)
       updates.learnedPreferences = extract.newPreferences;
-    if (extract.maxMood) {
-      updates.importantConversations = [
-        {
-          date: today,
-          summary: extract.importantTopic || userMessage.slice(0, 80),
-          maxMood: extract.maxMood,
-        },
-      ];
-    }
+    if (extract.topicAsked)
+      updates.topicsAsked = [extract.topicAsked];
 
+    // Always record a conversation entry (not just when mood is detected)
+    const summary = extract.importantTopic || userMessage.slice(0, 80);
+    updates.importantConversations = [{
+      date: today,
+      summary,
+      maxMood: extract.maxMood || undefined,
+    }];
+
+    // Mood update from explicit keywords
     const moodMap: Record<string, string> = {
       เครียด: "attentive and caring",
       เศร้า: "warm and supportive",
@@ -93,12 +110,8 @@ async function updateMemoryAsync(
       }
     }
 
-    if (Object.keys(updates).length > 0) {
-      await updateMilinMemory(updates);
-    }
+    await updateMilinMemory(updates);
   } catch {
     // Non-critical — don't surface memory update errors
   }
 }
-
-export { getMilinMemory };

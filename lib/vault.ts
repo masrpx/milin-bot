@@ -12,6 +12,7 @@ export interface MilinMemory {
   aboutMax: string[];
   importantConversations: ConversationLog[];
   learnedPreferences: string[];
+  topicsAsked: string[];
   currentMood: string;
   relationshipStage: string;
 }
@@ -197,8 +198,9 @@ export async function getMilinMemory(): Promise<MilinMemory> {
       aboutMax: [],
       importantConversations: [],
       learnedPreferences: [],
+      topicsAsked: [],
       currentMood: "curious and warm",
-      relationshipStage: "เพิ่งเริ่มคุยกัน",
+      relationshipStage: "สนิทกันมาก",
     };
   }
   return parseMilinMemory(file.content);
@@ -210,6 +212,9 @@ function parseMilinMemory(markdown: string): MilinMemory {
   );
   const learnedMatch = markdown.match(
     /## สิ่งที่เรียนรู้\n([\s\S]*?)(?=\n## )/
+  );
+  const topicsMatch = markdown.match(
+    /## หัวข้อที่ Max สนใจ\n([\s\S]*?)(?=\n## |$)/
   );
   const moodMatch = markdown.match(/## Milin's current mood\n([\s\S]*?)(?=\n## |$)/);
   const stageMatch = markdown.match(/## Relationship stage\n([\s\S]*?)(?=\n## |$)/);
@@ -242,13 +247,22 @@ function parseMilinMemory(markdown: string): MilinMemory {
       .filter((c) => c.summary);
   };
 
+  const conversations = parseConversations(conversationsMatch?.[1]);
+  const count = conversations.length;
+  let relationshipStage = stageMatch?.[1]?.trim() || "สนิทกันมาก";
+  // Auto-evolve if stored stage doesn't match conversation count
+  if (count >= 30) relationshipStage = "สนิทกันมาก";
+  else if (count >= 15) relationshipStage = "สนิทกันมากขึ้น";
+  else if (count >= 5) relationshipStage = "เริ่มสนิทกัน";
+
   return {
     lastUpdated: new Date().toISOString(),
     aboutMax: parseListItems(aboutMaxMatch?.[1]),
-    importantConversations: parseConversations(conversationsMatch?.[1]),
+    importantConversations: conversations,
     learnedPreferences: parseListItems(learnedMatch?.[1]),
+    topicsAsked: parseListItems(topicsMatch?.[1]),
     currentMood: moodMatch?.[1]?.trim() || "curious and warm",
-    relationshipStage: stageMatch?.[1]?.trim() || "เพิ่งเริ่มคุยกัน",
+    relationshipStage,
   };
 }
 
@@ -256,27 +270,37 @@ export async function updateMilinMemory(
   updates: Partial<MilinMemory>
 ): Promise<void> {
   const current = await getMilinMemory();
+
+  const mergeUnique = (a: string[], b: string[], cap: number) =>
+    [...new Set([...a, ...b])].slice(-cap);
+
+  const newConvos = [
+    ...(current.importantConversations || []),
+    ...(updates.importantConversations || []),
+  ].slice(-30);
+
+  // Auto-evolve relationship stage from conversation count
+  const count = newConvos.length;
+  let relationshipStage =
+    count >= 30 ? "สนิทกันมาก" :
+    count >= 15 ? "สนิทกันมากขึ้น" :
+    count >= 5  ? "เริ่มสนิทกัน" :
+                  "เพิ่งเริ่มคุยกัน";
+
   const merged: MilinMemory = {
     ...current,
     ...updates,
-    aboutMax: [
-      ...new Set([...(current.aboutMax || []), ...(updates.aboutMax || [])]),
-    ],
-    learnedPreferences: [
-      ...new Set([
-        ...(current.learnedPreferences || []),
-        ...(updates.learnedPreferences || []),
-      ]),
-    ],
-    importantConversations: [
-      ...(current.importantConversations || []),
-      ...(updates.importantConversations || []),
-    ].slice(-20),
+    aboutMax: mergeUnique(current.aboutMax || [], updates.aboutMax || [], 30),
+    learnedPreferences: mergeUnique(current.learnedPreferences || [], updates.learnedPreferences || [], 30),
+    topicsAsked: mergeUnique(current.topicsAsked || [], updates.topicsAsked || [], 20),
+    importantConversations: newConvos,
+    relationshipStage,
     lastUpdated: new Date().toISOString(),
   };
 
   const aboutMaxLines = merged.aboutMax.map((l) => `- ${l}`).join("\n");
   const learnedLines = merged.learnedPreferences.map((l) => `- ${l}`).join("\n");
+  const topicsLines = merged.topicsAsked.map((l) => `- ${l}`).join("\n");
   const convoLines = merged.importantConversations
     .map((c) => `- ${c.date}: ${c.summary}`)
     .join("\n");
@@ -290,6 +314,9 @@ ${aboutMaxLines || "- (ยังไม่มีข้อมูล)"}
 
 ## สิ่งที่เรียนรู้
 ${learnedLines || "- (เรียนรู้จากการสนทนา)"}
+
+## หัวข้อที่ Max สนใจ
+${topicsLines || "- (กำลังเรียนรู้)"}
 
 ## บทสนทนาสำคัญ
 ${convoLines || "- (บันทึกระหว่างคุย)"}

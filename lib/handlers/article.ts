@@ -52,12 +52,16 @@ export async function handleArticle(
 แต่ละ note ควรมี 1 concept ที่ชัดเจน
 Max สนใจ: Dhamma, Biohacking, Business, Finance, Psychology, Gaming, AI
 
+Vault structure (PARA):
+- 01 Projects, 02 Areas, 03 Resources, 04 Archives, 05 Milin
+- ใช้ 03 Resources เสมอ เช่น 03 Resources/Biohacking, 03 Resources/Finance, 03 Resources/AI
+
 ตอบเป็น JSON array เท่านั้น ไม่มีข้อความอื่น:
 [
   {
     "title": "ชื่อ note",
     "summary": "สรุปเนื้อหา 2-3 ประโยค",
-    "suggestedVaultPath": "เช่น 04 Resources/Biohacking",
+    "suggestedVaultPath": "เช่น 03 Resources/Biohacking",
     "relevanceReason": "เกี่ยวกับ Max ยังไง"
   }
 ]

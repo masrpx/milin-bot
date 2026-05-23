@@ -2,20 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyLineSignature, replyMessage } from "@/lib/line";
 import { getMilinMemory } from "@/lib/vault";
 import { handleCapture } from "@/lib/handlers/capture";
-import { handleQuery } from "@/lib/handlers/query";
 import { handleArticle } from "@/lib/handlers/article";
-import { handleChat } from "@/lib/handlers/chat";
+import { handleConversation } from "@/lib/handlers/conversation";
 import { handleApprove, isApproveCommand } from "@/lib/handlers/approve";
-
-const QUERY_TRIGGERS = [
-  "?", "ใคร", "อะไร", "ยังไง", "ทำไม", "เมื่อไหร่", "ที่ไหน",
-  "หา", "ค้นหา", "สรุป", "บอก", "อธิบาย", "แนะนำ", "มีไหม", "ช่วย",
-];
-
-const CHAT_TRIGGERS = [
-  "สวัสดี", "หวัดดี", "เป็นยังไงบ้าง", "รู้สึก", "คิดว่า", "เหนื่อย",
-  "เครียด", "สนุก", "มีความสุข", "เศร้า", "กลัว", "อยาก", "รัก",
-];
 
 async function routeMessage(
   text: string,
@@ -23,14 +12,12 @@ async function routeMessage(
 ): Promise<string> {
   const isUrl = /https?:\/\/[^\s]+/.test(text);
   const isLongText = text.length > 500;
-  const isQuestion = QUERY_TRIGGERS.some((t) => text.includes(t));
-  const isChat = CHAT_TRIGGERS.some((t) => text.includes(t));
+  const isCapture = /^จด:/i.test(text.trim());
 
   if (isApproveCommand(text)) return handleApprove(text);
   if (isUrl || isLongText) return handleArticle(text, isUrl);
-  if (isQuestion) return handleQuery(text, memory);
-  if (isChat) return handleChat(text, memory);
-  return handleCapture(text);
+  if (isCapture) return handleCapture(text.replace(/^จด:\s*/i, "").trim());
+  return handleConversation(text, memory);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
