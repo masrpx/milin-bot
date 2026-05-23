@@ -7,6 +7,19 @@ const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 const OWNER = process.env.GITHUB_OWNER!;
 const REPO = process.env.GITHUB_REPO!;
 
+export interface PendingAction {
+  type: "delete" | "update";
+  eventId: string;
+  eventTitle: string;
+  changes?: {
+    title?: string;
+    startISO?: string;
+    endISO?: string;
+    description?: string;
+  };
+  expiresAt: string; // ISO — expires after 5 minutes
+}
+
 export interface MilinMemory {
   lastUpdated: string;
   aboutMax: string[];
@@ -15,6 +28,7 @@ export interface MilinMemory {
   topicsAsked: string[];
   currentMood: string;
   relationshipStage: string;
+  pendingAction?: PendingAction;
 }
 
 export interface ConversationLog {
@@ -255,6 +269,18 @@ function parseMilinMemory(markdown: string): MilinMemory {
   else if (count >= 15) relationshipStage = "สนิทกันมากขึ้น";
   else if (count >= 5) relationshipStage = "เริ่มสนิทกัน";
 
+  const pendingActionMatch = markdown.match(
+    /## Pending Action\n([\s\S]*?)(?=\n## |$)/
+  );
+  let pendingAction: PendingAction | undefined;
+  if (pendingActionMatch?.[1]?.trim()) {
+    try {
+      pendingAction = JSON.parse(pendingActionMatch[1].trim()) as PendingAction;
+    } catch {
+      pendingAction = undefined;
+    }
+  }
+
   return {
     lastUpdated: new Date().toISOString(),
     aboutMax: parseListItems(aboutMaxMatch?.[1]),
@@ -263,6 +289,7 @@ function parseMilinMemory(markdown: string): MilinMemory {
     topicsAsked: parseListItems(topicsMatch?.[1]),
     currentMood: moodMatch?.[1]?.trim() || "curious and warm",
     relationshipStage,
+    pendingAction,
   };
 }
 
@@ -305,6 +332,10 @@ export async function updateMilinMemory(
     .map((c) => `- ${c.date}: ${c.summary}`)
     .join("\n");
 
+  const pendingActionSection = merged.pendingAction
+    ? `\n## Pending Action\n${JSON.stringify(merged.pendingAction)}\n`
+    : "";
+
   const content = `---
 last_updated: ${merged.lastUpdated}
 ---
@@ -326,7 +357,7 @@ ${merged.currentMood}
 
 ## Relationship stage
 ${merged.relationshipStage}
-`;
+${pendingActionSection}`;
 
   await upsertFile(
     "05 Milin/milin-memory.md",
