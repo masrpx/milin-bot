@@ -61,14 +61,17 @@ Vault PARA structure (GitHub repo `masrpx/obsidian-vault`):
 | Priority | Condition | Handler |
 |---|---|---|
 | 1 | `isApproveCommand()` | `handleApprove` — "ok 1,2", "ok ทั้งหมด", "skip" |
-| 2 | `isPendingCalendarConfirm()` | `handleCalendarConfirm` — "ยืนยัน" + valid pendingAction |
-| 3 | `isCalendarMessage()` | `handleCalendar` — CRUD + intent detection via Haiku |
+| 2 | `hasPendingColorReply()` | `handleColorReply` — color name reply for pending event creation |
+| 3 | `isPendingCalendarConfirm()` | `handleCalendarConfirm` — "ยืนยัน" + valid delete/update pendingAction |
 | 4 | Starts with `จด:` | `handleCapture` — strips prefix, saves to 00 Inbox |
 | 5 | URL or text > 500 chars | `handleArticle` — parses → atomic notes → queue |
-| 6 | Everything else | `handleConversation` — Milin personality + optional vault |
+| 6 | Haiku `classifyMessage()` = "calendar" | `handleCalendar` — CRUD + intent via Haiku |
+| 7 | Everything else | `handleConversation` — Milin personality + optional vault |
 
 **Important:** `จด:` is priority 4 (before long-text check) — long capture messages must not fall into article handler.
 **Important:** `ยืนยัน` without valid/non-expired pendingAction falls through to `handleConversation`.
+**Important:** `hasPendingColorReply()` must run before `classifyMessage()` — a one-word color reply ("แดง") would be misclassified as "chat" otherwise.
+**Important:** `classifyMessage()` (Haiku) replaces keyword regex — any natural Thai phrasing is understood, no fixed trigger words needed.
 
 ---
 
@@ -101,6 +104,13 @@ Stored in `05 Milin/milin-memory.md` as markdown with JSON frontmatter.
 
 Memory extract (Haiku, async after every conversation): extracts `newFacts`, `newPreferences`, `maxMood`, `importantTopic`, `topicAsked`.
 
+`pendingAction` field (optional, in-memory state for multi-turn calendar flows):
+| type | purpose | resolved by |
+|---|---|---|
+| `"delete"` | confirm before deleting an event | user says "ยืนยัน" |
+| `"update"` | confirm before moving/editing an event | user says "ยืนยัน" |
+| `"create"` | waiting for color selection before creating | user replies Thai color name |
+
 ---
 
 ## Claude Models
@@ -108,7 +118,7 @@ Memory extract (Haiku, async after every conversation): extracts `newFacts`, `ne
 | Model | Used For |
 |---|---|
 | `claude-sonnet-4-6` | Conversation, article parsing, research summarize, milin-ping |
-| `claude-haiku-4-5-20251001` | Memory extraction, vault file picking, relevance scoring |
+| `claude-haiku-4-5-20251001` | Message routing classifier, calendar intent/date parsing, memory extraction, vault file picking, relevance scoring |
 
 ---
 
@@ -164,6 +174,10 @@ curl "https://milin-bot.vercel.app/api/cron/milin-ping?secret=YOUR_CRON_SECRET"
 10. **Google Calendar access_token** is never cached — refreshed on every call via refresh_token
 11. **pendingAction expires after 5 min** — "ยืนยัน" after expiry falls through to `handleConversation`
 12. **Calendar section in morning report** — only shown if events > 0; silent fail if Google API is down
+13. **Calendar routing uses Haiku pre-classifier** (`classifyMessage`) — no fixed keyword trigger needed; any natural Thai works
+14. **Color theme in `lib/handlers/calendar.ts`** — `COLOR_THEME_DESCRIPTION` constant feeds Haiku; colorId picked automatically by event category (Peacock=landmark, Tangerine=BNI, Banana=clinic, Basil=health, Graphite=factory, Lavender=personal, Blueberry=finance, Tomato=work)
+15. **pendingAction type "create"** — when color is unknown, Milin asks before creating; user replies with Thai color name; `THAI_COLOR_TO_ID` map resolves it; checked at priority 2 (before classifier) so one-word replies aren't misrouted
+16. **Google Calendar colorId** — API expects string "1"–"11"; `lib/calendar.ts` converts to/from number internally
 
 ---
 
