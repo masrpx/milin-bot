@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runNightlyResearch } from "@/lib/research";
 
+export const maxDuration = 300;
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

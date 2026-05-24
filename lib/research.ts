@@ -179,9 +179,18 @@ export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
     }
   }
 
+  // Cap raw findings before scoring — prevents runaway sequential API calls
+  // 16 feeds × 8 items = up to 128 candidates; we only need to score ~25 to get 10 keepers
+  const candidatesPerFeed = Math.ceil(25 / DEFAULT_RSS_FEEDS.length);
+  const cappedFindings = rawFindings.slice(0, candidatesPerFeed * DEFAULT_RSS_FEEDS.length).slice(0, 25);
+
   // Score, fetch full article, and summarize (sequential to avoid hammering servers)
+  // Hard time budget: stop at 4 min so Vercel doesn't kill the function mid-save
+  const BUDGET_MS = 4 * 60 * 1000;
+  const startTime = Date.now();
   const scored: (KnowledgeItem | null)[] = [];
-  for (const f of rawFindings) {
+  for (const f of cappedFindings) {
+    if (Date.now() - startTime > BUDGET_MS) break;
     const item = await scoreAndCreateNote(f.title, f.content, f.source, f.type, interests);
     scored.push(item);
   }
