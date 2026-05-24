@@ -96,7 +96,7 @@ export function isCalendarMessage(text: string): boolean {
 // ---------------------------------------------------------------------------
 
 type CalendarRequest = {
-  intent: "read" | "create" | "update" | "delete" | "suggest" | "unknown";
+  intent: "read" | "free_check" | "create" | "update" | "delete" | "suggest" | "unknown";
   title?: string;
   startISO?: string;
   endISO?: string;
@@ -126,7 +126,7 @@ Parse this Thai calendar request and return JSON only:
 "${text}"
 
 {
-  "intent": "read|create|update|delete|suggest",
+  "intent": "read|free_check|create|update|delete|suggest",
   "title": "event title (create/update only, else null)",
   "startISO": "ISO datetime with +07:00 offset",
   "endISO": "ISO datetime with +07:00 offset",
@@ -142,7 +142,8 @@ Date/time rules:
 - สัปดาห์หน้า=next Mon-Sun
 - 9 โมง/9 นาฬิกา=09:00, บ่ายโมง=13:00, บ่ายสาม=15:00, เที่ยง=12:00, ทุ่มหนึ่ง=19:00
 - ครึ่งชั่วโมง=30min, 1 ชั่วโมง=60min
-- read: startISO=day 00:00+07:00, endISO=day 23:59:59+07:00
+- read: asking what's on a day (no specific window) → startISO=day 00:00+07:00, endISO=day 23:59:59+07:00
+- free_check: asking if a specific time window is free (ว่างไหมช่วง X-Y, มีนัดไหม X-Y) → startISO=exact start time, endISO=exact end time
 - suggest: use the week/day range specified, durationMin from text
 - All times in +07:00 offset
 
@@ -217,6 +218,35 @@ export async function handleCalendar(
           .map((e) => `• ${formatTime(e.startISO)} — ${e.title}`)
           .join("\n");
         return `📅 ${formatDateLabel(req.startISO)}:\n${lines}`;
+      }
+
+      case "free_check": {
+        if (!req.startISO || !req.endISO) {
+          return "บอกช่วงเวลาที่อยากเช็คด้วยนะ เช่น 'พรุ่งนี้ 10-12 ว่างไหม'~";
+        }
+        // Fetch all events for that day, then check for overlap with the specified window
+        const datePrefix = req.startISO.slice(0, 10);
+        const dayStart = `${datePrefix}T00:00:00+07:00`;
+        const dayEnd = `${datePrefix}T23:59:59+07:00`;
+        const dayEvents = await getEvents(dayStart, dayEnd);
+
+        const windowStart = new Date(req.startISO);
+        const windowEnd = new Date(req.endISO);
+        const conflicts = dayEvents.filter((e) => {
+          const eStart = new Date(e.startISO);
+          const eEnd = new Date(e.endISO);
+          return eStart < windowEnd && eEnd > windowStart;
+        });
+
+        const windowLabel = `${formatTime(req.startISO)}–${formatTime(req.endISO)}`;
+        const dateLabel = formatDateLabel(req.startISO);
+        if (conflicts.length === 0) {
+          return `ว่างเลยนะ ✅ ${dateLabel} ช่วง ${windowLabel} ไม่มีนัดอะไร~`;
+        }
+        const conflictLines = conflicts
+          .map((e) => `• ${formatTime(e.startISO)}–${formatTime(e.endISO)} ${e.title}`)
+          .join("\n");
+        return `ไม่ว่างนะ ❌ ${dateLabel} ช่วง ${windowLabel} มีนัดอยู่:\n${conflictLines}`;
       }
 
       case "create": {

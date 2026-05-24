@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/organize",
-      "schedule": "27 11 * * *"
+      "schedule": "30 18 */3 * *"
     },
     {
       "path": "/api/cron/milin-ping",
