@@ -68,19 +68,27 @@ async function getFile(
   }
 }
 
+// Exported so cron/morning and handlers/approve can share date-offset logic
+export function getDateOffset(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
 async function upsertFile(
   path: string,
   content: string,
-  message: string
+  message: string,
+  knownSha?: string        // pass when sha is already in hand to skip an extra getFile call
 ): Promise<void> {
-  const existing = await getFile(path);
+  const sha = knownSha ?? (await getFile(path))?.sha;
   await octokit.repos.createOrUpdateFileContents({
     owner: OWNER,
     repo: REPO,
     path,
     message,
     content: Buffer.from(content, "utf-8").toString("base64"),
-    ...(existing ? { sha: existing.sha } : {}),
+    ...(sha ? { sha } : {}),
   });
 }
 
@@ -98,8 +106,7 @@ async function deleteFile(path: string): Promise<void> {
 
 export async function searchVault(query: string): Promise<string[]> {
   try {
-    const repoRes = await octokit.repos.get({ owner: OWNER, repo: REPO });
-    const branch = repoRes.data.default_branch;
+    const branch = "main";
 
     const treeRes = await octokit.git.getTree({
       owner: OWNER,
@@ -272,6 +279,7 @@ function parseMilinMemory(markdown: string): MilinMemory {
   if (count >= 30) relationshipStage = "สนิทกันมาก";
   else if (count >= 15) relationshipStage = "สนิทกันมากขึ้น";
   else if (count >= 5) relationshipStage = "เริ่มสนิทกัน";
+  else relationshipStage = "เพิ่งเริ่มคุยกัน";
 
   const pendingActionMatch = markdown.match(
     /## Pending Action\n([\s\S]*?)(?=\n## |$)/
@@ -300,7 +308,16 @@ function parseMilinMemory(markdown: string): MilinMemory {
 export async function updateMilinMemory(
   updates: Partial<MilinMemory>
 ): Promise<void> {
-  const current = await getMilinMemory();
+  // Read file directly (not via getMilinMemory) so we keep the SHA for the write —
+  // avoids a second getFile call inside upsertFile.
+  const existingFile = await getFile("05 Milin/milin-memory.md");
+  const current: MilinMemory = existingFile
+    ? parseMilinMemory(existingFile.content)
+    : {
+        lastUpdated: new Date().toISOString(),
+        aboutMax: [], importantConversations: [], learnedPreferences: [],
+        topicsAsked: [], currentMood: "curious and warm", relationshipStage: "สนิทกันมาก",
+      };
 
   const mergeUnique = (a: string[], b: string[], cap: number) =>
     [...new Set([...a, ...b])].slice(-cap);
@@ -366,7 +383,8 @@ ${pendingActionSection}`;
   await upsertFile(
     "05 Milin/milin-memory.md",
     content,
-    "milin: update memory"
+    "milin: update memory",
+    existingFile?.sha
   );
 }
 
@@ -462,33 +480,3 @@ export async function deleteKnowledgeQueue(date: string): Promise<void> {
   await deleteFile(`05 Milin/knowledge-queue/${date}.md`);
 }
 
-export async function getVaultMOCs(): Promise<string> {
-  const mocPaths = [
-    "00 Inbox",
-    "01 Daily",
-    "06 MOC",
-  ];
-  const results: string[] = [];
-  for (const folder of mocPaths) {
-    try {
-      const res = await octokit.repos.getContent({
-        owner: OWNER,
-        repo: REPO,
-        path: folder,
-      });
-      if (Array.isArray(res.data)) {
-        const files = res.data
-          .filter((f) => f.name.endsWith(".md"))
-          .map((f) => f.path)
-          .slice(0, 3);
-        for (const filePath of files) {
-          const file = await getFile(filePath);
-          if (file) results.push(`## ${filePath}\n${file.content.slice(0, 500)}`);
-        }
-      }
-    } catch {
-      continue;
-    }
-  }
-  return results.join("\n\n");
-}

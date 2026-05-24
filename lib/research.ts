@@ -1,7 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import axios from "axios";
-import * as cheerio from "cheerio";
 import Parser from "rss-parser";
+import { fetchArticleText } from "./fetch-article";
 import {
   getMilinMemory,
   saveToKnowledgeQueue,
@@ -59,24 +58,6 @@ async function fetchRssItems(
   }
 }
 
-async function fetchFullArticle(url: string): Promise<string> {
-  try {
-    const { data: html } = await axios.get(url, {
-      timeout: 10000,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; MilinBot/1.0)" },
-    });
-    const $ = cheerio.load(html);
-    $("script, style, nav, header, footer, aside, .ad, .ads, .advertisement").remove();
-    const selectors = ["article", "main", ".content", ".post-content", "#content", "body"];
-    for (const sel of selectors) {
-      const text = $(sel).text().replace(/\s+/g, " ").trim();
-      if (text.length > 300) return text.slice(0, 6000);
-    }
-    return "";
-  } catch {
-    return "";
-  }
-}
 
 async function scoreAndCreateNote(
   title: string,
@@ -102,7 +83,7 @@ If clearly irrelevant return: {"score": 0}`;
   if (quickScore < 6) return null;
 
   // Step 2: fetch full article for items that passed
-  const fullText = await fetchFullArticle(url);
+  const fullText = await fetchArticleText(url, 6000).catch(() => "");
   const content = fullText.length > 300 ? fullText : snippet;
 
   // Step 3: summarize from full content
@@ -179,10 +160,9 @@ export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
     }
   }
 
-  // Cap raw findings before scoring — prevents runaway sequential API calls
-  // 16 feeds × 8 items = up to 128 candidates; we only need to score ~25 to get 10 keepers
-  const candidatesPerFeed = Math.ceil(25 / DEFAULT_RSS_FEEDS.length);
-  const cappedFindings = rawFindings.slice(0, candidatesPerFeed * DEFAULT_RSS_FEEDS.length).slice(0, 25);
+  // Cap at 25 before scoring — prevents runaway sequential API calls
+  // (16 feeds × 8 items = up to 128 candidates; 25 is enough to yield 10 keepers)
+  const cappedFindings = rawFindings.slice(0, 25);
 
   // Score, fetch full article, and summarize (sequential to avoid hammering servers)
   // Hard time budget: stop at 4 min so Vercel doesn't kill the function mid-save

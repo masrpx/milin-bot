@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pushMessage } from "@/lib/line";
-import { getKnowledgeQueue } from "@/lib/vault";
+import { getKnowledgeQueue, getDateOffset } from "@/lib/vault";
 import { getEvents } from "@/lib/calendar";
-
-function getDateOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
-}
 
 /** Today's start/end in ICT (UTC+7) as ISO strings */
 function getTodayICTRange(): { start: string; end: string } {

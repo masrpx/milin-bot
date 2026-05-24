@@ -2,13 +2,8 @@ import {
   getKnowledgeQueue,
   approveKnowledgeItem,
   deleteKnowledgeQueue,
+  getDateOffset,
 } from "../vault";
-
-function getDateOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
-}
 
 // Match morning cron logic: today first, then yesterday
 async function findQueueDate(): Promise<string | null> {

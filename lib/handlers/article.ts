@@ -1,27 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
-import * as cheerio from "cheerio";
-import axios from "axios";
+import { fetchArticleText } from "../fetch-article";
 import { saveToKnowledgeQueue, type KnowledgeItem } from "../vault";
 
 const client = new Anthropic();
-
-async function fetchArticleText(url: string): Promise<string> {
-  const { data: html } = await axios.get(url, {
-    timeout: 10000,
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; MilinBot/1.0)" },
-  });
-  const $ = cheerio.load(html);
-
-  $("script, style, nav, header, footer, aside, .ad, .ads, .advertisement").remove();
-
-  const selectors = ["article", "main", ".content", ".post-content", "#content", "body"];
-  for (const sel of selectors) {
-    const text = $(sel).text().replace(/\s+/g, " ").trim();
-    if (text.length > 200) return text.slice(0, 8000);
-  }
-
-  return $("body").text().replace(/\s+/g, " ").trim().slice(0, 8000);
-}
 
 export async function handleArticle(
   input: string,
