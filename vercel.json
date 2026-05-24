@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/research",
-      "schedule": "0 18 * * *"
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/cron/morning",
