@@ -38,6 +38,49 @@ export async function pushMessage(text: string): Promise<void> {
   );
 }
 
+export async function pushImageMessage(imageUrl: string): Promise<void> {
+  await axios.post(
+    `${LINE_API}/push`,
+    {
+      to: process.env.LINE_USER_ID,
+      messages: [
+        { type: "image", originalContentUrl: imageUrl, previewImageUrl: imageUrl },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+// Sends image + text in a single reply call (2 messages).
+// Used for on-demand photo requests from the LINE chat.
+export async function replyImageMessage(
+  replyToken: string,
+  imageUrl: string,
+  text: string
+): Promise<void> {
+  await axios.post(
+    `${LINE_API}/reply`,
+    {
+      replyToken,
+      messages: [
+        { type: "image", originalContentUrl: imageUrl, previewImageUrl: imageUrl },
+        { type: "text", text },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
 export function verifyLineSignature(
   body: string,
   signature: string

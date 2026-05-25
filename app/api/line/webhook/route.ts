@@ -13,6 +13,7 @@ import {
   hasPendingColorReply,
   isPendingCalendarConfirm,
 } from "@/lib/handlers/calendar";
+import { handlePhotoRequest } from "@/lib/handlers/photo-request";
 
 const anthropic = new Anthropic();
 
@@ -22,7 +23,9 @@ const anthropic = new Anthropic();
 // Returns "calendar" or "chat". Falls back to "chat" on any error.
 // ---------------------------------------------------------------------------
 
-async function classifyMessage(text: string): Promise<"calendar" | "chat"> {
+async function classifyMessage(
+  text: string
+): Promise<"calendar" | "photo_request" | "chat"> {
   try {
     const res = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -30,18 +33,25 @@ async function classifyMessage(text: string): Promise<"calendar" | "chat"> {
       messages: [
         {
           role: "user",
-          content: `Classify this Thai message as "calendar" (scheduling, appointments, events, meetings, free time, dates, timetable) or "chat" (everything else).
+          content: `Classify this Thai message into one category:
+- "calendar": scheduling, appointments, events, meetings, checking free time, dates, timetable
+- "photo_request": asking Milin to send a photo, show what she's doing, or share a picture
+- "chat": everything else
 
 Message: "${text}"
 
-Reply with ONLY: calendar OR chat`,
+Reply with ONLY: calendar OR photo_request OR chat`,
         },
       ],
     });
-    const result = res.content[0].type === "text" ? res.content[0].text.trim().toLowerCase() : "chat";
-    return result.includes("calendar") ? "calendar" : "chat";
+    const result =
+      res.content[0].type === "text"
+        ? res.content[0].text.trim().toLowerCase()
+        : "chat";
+    if (result.includes("calendar")) return "calendar";
+    if (result.includes("photo_request") || result.includes("photo")) return "photo_request";
+    return "chat";
   } catch {
-    // Safe default — conversation handler gracefully covers missed calendar messages
     return "chat";
   }
 }
@@ -50,8 +60,11 @@ Reply with ONLY: calendar OR chat`,
 // Message router — priority order matters
 // ---------------------------------------------------------------------------
 
+// Returns the reply string, or "" if the handler already sent the reply directly
+// (e.g. photo_request uses replyImageMessage internally).
 async function routeMessage(
   text: string,
+  replyToken: string,
   memory: Awaited<ReturnType<typeof getMilinMemory>>
 ): Promise<string> {
   const isUrl = /https?:\/\/[^\s]+/.test(text);
@@ -89,10 +102,18 @@ async function routeMessage(
   // Priority 5: URL or long text → article handler (no LLM needed to detect)
   if (isUrl || isLongText) return handleArticle(text, isUrl);
 
-  // Priority 6: Haiku pre-classifier decides calendar vs chat.
+  // Priority 6: Haiku pre-classifier decides calendar / photo_request / chat.
   // Covers natural language that doesn't match any fixed keyword.
   const category = await classifyMessage(text);
   if (category === "calendar") return handleCalendar(text, memory);
+
+  // Priority 7: photo request — handler sends image+text directly via replyToken,
+  // returns "" so the caller knows not to send another reply.
+  if (category === "photo_request") {
+    await handlePhotoRequest(replyToken, memory);
+    return "";
+  }
+
   return handleConversation(text, memory);
 }
 
@@ -134,8 +155,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     try {
       const memory = await getMilinMemory();
-      const reply = await routeMessage(text, memory);
-      await replyMessage(replyToken, reply);
+      const reply = await routeMessage(text, replyToken, memory);
+      // "" means the handler already replied directly (e.g. photo_request)
+      if (reply) await replyMessage(replyToken, reply);
     } catch (err) {
       console.error("Webhook handler error:", err);
       await replyMessage(replyToken, "มีบางอย่างผิดพลาดอ่ะ ลองใหม่นะ~");
