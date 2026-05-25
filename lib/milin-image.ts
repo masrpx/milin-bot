@@ -13,7 +13,7 @@ function getOpenAI() { return (_openai ??= new OpenAI()); }
 
 // Reference image at project root — committed to repo, read from filesystem.
 // No URL, no expiry. Add milin-image-1 to the repo and it's always available.
-const REFERENCE_IMAGE_PATH = path.join(process.cwd(), "milin-image-1");
+const REFERENCE_IMAGE_PATH = path.join(process.cwd(), "milin-image-1.png");
 
 function detectImageType(buf: Buffer): { contentType: string; ext: string } {
   // PNG: 89 50 4E 47
