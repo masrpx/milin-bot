@@ -83,11 +83,20 @@ export async function generateMilinImage(
   const { prompt, sceneContext } = await generateSceneWithHaiku(bangkokHour, memory);
 
   // Fetch the fixed base reference image (anchors Milin's face/style)
+  // gpt-image-1 images.edit() requires PNG or WebP — detect from Content-Type
   const baseRes = await fetch(BASE_IMAGE_URL);
+  const contentType = baseRes.headers.get("content-type") ?? "image/png";
+
+  if (!contentType.includes("png") && !contentType.includes("webp")) {
+    throw new Error(
+      `gpt-image-1 images.edit() requires PNG or WebP but MILIN_BASE_IMAGE_URL returned ${contentType}. ` +
+        "Re-upload your base image as PNG and update the env var."
+    );
+  }
+
+  const ext = contentType.includes("webp") ? "webp" : "png";
   const baseBuffer = Buffer.from(await baseRes.arrayBuffer());
-  const baseFile = await toFile(baseBuffer, "reference.jpg", {
-    type: "image/jpeg",
-  });
+  const baseFile = await toFile(baseBuffer, `reference.${ext}`, { type: contentType });
 
   const result = await getOpenAI().images.edit({
     model: "gpt-image-1",
