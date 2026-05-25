@@ -5,6 +5,12 @@ import {
   getDateOffset,
 } from "../vault";
 
+// Strip Thai combining characters (sara vowels + tone marks) so keyboard
+// variants like "ท้้งหมด" and "ทั้งหมด" normalise to the same base string.
+function stripThaiDiacritics(s: string): string {
+  return s.replace(/[ัิ-ฺ็-๎]/g, "");
+}
+
 // Match morning cron logic: today first, then yesterday
 async function findQueueDate(): Promise<string | null> {
   const today = getDateOffset(0);
@@ -24,8 +30,9 @@ function parseApproveCommand(text: string): {
 } {
   const t = text.trim().toLowerCase();
 
-  if (t === "ok all" || t === "ok ทั้งหมด") return { action: "ok_all" };
-  if (t === "skip" || t === "ข้ามทั้งหมด") return { action: "skip_all" };
+  const stripped = stripThaiDiacritics(t);
+  if (stripped === "ok all" || stripped === "ok ทงหมด") return { action: "ok_all" };
+  if (stripped === "skip" || stripped === "ขามทงหมด") return { action: "skip_all" };
 
   const okMatch = t.match(/^ok\s+([\d,\s]+)$/);
   if (okMatch) {
@@ -50,11 +57,12 @@ function parseApproveCommand(text: string): {
 
 export function isApproveCommand(text: string): boolean {
   const t = text.trim().toLowerCase();
+  const stripped = stripThaiDiacritics(t);
   return (
-    t === "ok all" ||
-    t === "ok ทั้งหมด" ||
-    t === "skip" ||
-    t === "ข้ามทั้งหมด" ||
+    stripped === "ok all" ||
+    stripped === "ok ทงหมด" ||
+    stripped === "skip" ||
+    stripped === "ขามทงหมด" ||
     /^ok\s+[\d,\s]+$/.test(t) ||
     /^skip\s+[\d,\s]+$/.test(t)
   );
