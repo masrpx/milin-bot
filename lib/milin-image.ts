@@ -108,7 +108,7 @@ export async function generateMilinImage(
   const baseFile = await toFile(baseBuffer, `reference.${ext}`, { type: contentType });
 
   const result = await getOpenAI().images.edit({
-    model: "gpt-image-1",
+    model: "gpt-image-2",
     image: baseFile,
     prompt: `${prompt}. Maintain the same person's face, appearance, hair, and style from the reference photo.`,
     size: "1024x1024",
