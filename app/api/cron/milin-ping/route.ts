@@ -103,9 +103,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const memory = await getMilinMemory();
   const type = pickMessageType();
 
+  // Try with image; fall back to text-only if image generation fails
+  let imageUrl: string | null = null;
+  let sceneContext: string | undefined;
+
   try {
-    // Generate image first — sceneContext feeds into the text so they feel connected
-    const { imageUrl, sceneContext } = await generateMilinImage(memory);
+    ({ imageUrl, sceneContext } = await generateMilinImage(memory));
+  } catch (err) {
+    console.error("Milin ping: image generation failed, sending text only:", err);
+  }
+
+  try {
     const prompt = await buildPingPrompt(type, memory, sceneContext);
 
     const response = await client.messages.create({
@@ -118,11 +126,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       response.content[0].type === "text" ? response.content[0].text : "";
 
     if (message) {
-      await pushImageMessage(imageUrl);
+      if (imageUrl) await pushImageMessage(imageUrl);
       await pushMessage(message);
     }
 
-    return NextResponse.json({ ok: true, sent: true, type });
+    return NextResponse.json({ ok: true, sent: true, type, hasImage: !!imageUrl });
   } catch (err) {
     console.error("Milin ping error:", err);
     return NextResponse.json({ error: "Ping failed" }, { status: 500 });

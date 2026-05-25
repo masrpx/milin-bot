@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { generateMilinImage } from "../milin-image";
-import { replyImageMessage } from "../line";
+import { replyImageMessage, replyMessage } from "../line";
 import { buildMilinSystemPrompt } from "../milin-prompt";
 import type { MilinMemory } from "../vault";
 
@@ -10,7 +10,28 @@ export async function handlePhotoRequest(
   replyToken: string,
   memory: MilinMemory
 ): Promise<void> {
-  const { imageUrl, sceneContext } = await generateMilinImage(memory);
+  let imageUrl: string;
+  let sceneContext: string;
+
+  try {
+    ({ imageUrl, sceneContext } = await generateMilinImage(memory));
+  } catch (err) {
+    // Image generation failed (billing, quota, network) — reply with text only
+    console.error("handlePhotoRequest: image generation failed:", err);
+    const systemPrompt = buildMilinSystemPrompt(memory);
+    const fallbackRes = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 150,
+      system: systemPrompt,
+      messages: [{ role: "user", content: "Max ขอรูป แต่ Milin หารูปส่งไม่ได้ตอนนี้ ตอบสั้นๆ แบบ Milin ว่าตอนนี้ทำอะไรอยู่ โดยไม่มีรูป" }],
+    });
+    const fallbackText =
+      fallbackRes.content[0].type === "text"
+        ? fallbackRes.content[0].text
+        : "ตอนนี้กำลังยุ่งอยู่นิดหน่อย ส่งรูปทีหลังนะ~";
+    await replyMessage(replyToken, fallbackText);
+    return;
+  }
 
   const systemPrompt = buildMilinSystemPrompt(memory);
   const userPrompt = `Max ถามว่า Milin กำลังทำอะไรอยู่ หรือขอรูป
