@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI, { toFile } from "openai";
 import { put } from "@vercel/blob";
@@ -9,9 +11,22 @@ let _openai: OpenAI | null = null;
 function getAnthropic() { return (_anthropic ??= new Anthropic()); }
 function getOpenAI() { return (_openai ??= new OpenAI()); }
 
-// Set after running: npx tsx scripts/upload-base-images.ts
-// Add MILIN_BASE_IMAGE_URL to Vercel env vars + .env.local
-const BASE_IMAGE_URL = process.env.MILIN_BASE_IMAGE_URL ?? "";
+// Reference image at project root — committed to repo, read from filesystem.
+// No URL, no expiry. Add milin-image-1 to the repo and it's always available.
+const REFERENCE_IMAGE_PATH = path.join(process.cwd(), "milin-image-1");
+
+function detectImageType(buf: Buffer): { contentType: string; ext: string } {
+  // PNG: 89 50 4E 47
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)
+    return { contentType: "image/png", ext: "png" };
+  // WebP: RIFF????WEBP
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[8] === 0x57 && buf[9] === 0x45)
+    return { contentType: "image/webp", ext: "webp" };
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+    return { contentType: "image/jpeg", ext: "jpg" };
+  return { contentType: "image/png", ext: "png" };
+}
 
 type SceneSlot = { prompt: string; sceneContext: string };
 
@@ -77,25 +92,19 @@ Reply JSON only:
 export async function generateMilinImage(
   memory: MilinMemory
 ): Promise<{ imageUrl: string; sceneContext: string }> {
-  if (!BASE_IMAGE_URL) throw new Error("MILIN_BASE_IMAGE_URL is not set");
-
   const bangkokHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const { prompt, sceneContext } = await generateSceneWithHaiku(bangkokHour, memory);
 
-  // Fetch the fixed base reference image (anchors Milin's face/style)
-  // gpt-image-1 images.edit() requires PNG or WebP — detect from Content-Type
-  const baseRes = await fetch(BASE_IMAGE_URL);
-  const contentType = baseRes.headers.get("content-type") ?? "image/png";
+  // Read reference image from filesystem — no URL, no expiry
+  const baseBuffer = fs.readFileSync(REFERENCE_IMAGE_PATH);
+  const { contentType, ext } = detectImageType(baseBuffer);
 
   if (!contentType.includes("png") && !contentType.includes("webp")) {
     throw new Error(
-      `gpt-image-1 images.edit() requires PNG or WebP but MILIN_BASE_IMAGE_URL returned ${contentType}. ` +
-        "Re-upload your base image as PNG and update the env var."
+      `gpt-image-1 requires PNG or WebP. milin-image-1 detected as ${contentType}. Convert it to PNG and recommit.`
     );
   }
 
-  const ext = contentType.includes("webp") ? "webp" : "png";
-  const baseBuffer = Buffer.from(await baseRes.arrayBuffer());
   const baseFile = await toFile(baseBuffer, `reference.${ext}`, { type: contentType });
 
   const result = await getOpenAI().images.edit({
