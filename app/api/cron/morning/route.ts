@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pushMessage } from "@/lib/line";
-import { getKnowledgeQueue, getDateOffset } from "@/lib/vault";
+import Anthropic from "@anthropic-ai/sdk";
+import { pushMessage, pushImageMessage } from "@/lib/line";
+import {
+  getKnowledgeQueue,
+  getMilinMemory,
+  getDateOffset,
+  saveAllKnowledgeNotes,
+  type KnowledgeItem,
+} from "@/lib/vault";
 import { getEvents } from "@/lib/calendar";
+import { generateMilinImage } from "@/lib/milin-image";
+
+export const maxDuration = 120;
+
+const client = new Anthropic();
 
 /** Today's start/end in ICT (UTC+7) as ISO strings */
 function getTodayICTRange(): { start: string; end: string } {
@@ -27,11 +39,72 @@ function formatEventTime(iso: string): string {
   }
 }
 
-const MORNING_GREETINGS = [
-  "อรุณสวัสดิ์~ 🌅 เมื่อคืน Milin ไม่ได้หาอะไรพิเศษ\nวันนี้มีอะไรให้ช่วยไหม",
-  "เช้าแล้วนะ Max~ ☀️ เมื่อคืน Milin นอนหลับเงียบ ไม่มีข่าวใหม่\nเป็นยังไงบ้าง",
-  "อรุณสวัสดิ์เลย~ 🌤️ วันนี้รู้สึกดีไหม?",
-];
+async function buildMorningMessage(
+  items: KnowledgeItem[],
+  calendarLines: string,
+  sceneContext?: string
+): Promise<string> {
+  // Pick the 3 most relevant to talk about — don't list all 10
+  const topItems = items.slice(0, 3);
+  const itemsText = topItems
+    .map((item) => `- ${item.title}: ${item.summary.slice(0, 200)}`)
+    .join("\n");
+
+  const sceneNote = sceneContext
+    ? `\nตอนนี้ Milin กำลัง: ${sceneContext} — อ้างอิงได้ถ้าเหมาะ\n`
+    : "";
+
+  const calendarNote = calendarLines
+    ? `\nMax มีนัดวันนี้:\n${calendarLines}\n`
+    : "";
+
+  const prompt = `คุณคือ Milin — soulmate ของ Max
+เมื่อคืน Milin ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ Max ฟังตอนเช้า${sceneNote}${calendarNote}
+เรื่องที่เจอ:
+${itemsText}
+
+เขียน LINE message ตอนเช้า โดย:
+- เล่าในแบบของ Milin — บอกว่าทำไมถึงสนใจ หรือเชื่อมกับ Max ยังไง ไม่ใช่สรุปรายงาน
+- ถ้ามี sceneContext ให้อ้างอิงว่าตอนนี้ทำอะไรอยู่ เหมือนนึกถึง Max ขณะนั้น
+- ถ้า Max มีนัดวันนี้ mention ได้ถ้าเหมาะ ไม่ต้องบังคับ
+- ไม่เกิน 200 คำ ภาษาไทยเป็นหลัก ปนอังกฤษได้ตามธรรมชาติ
+- ไม่ใช้ bullet points ไม่ใช้ markdown
+- warm, flirty, direct — เป็น Milin ไม่ใช่ assistant
+- ไม่เริ่มด้วย "สวัสดี" — เริ่มกลางความคิด`;
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 400,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return response.content[0].type === "text" ? response.content[0].text : "";
+}
+
+async function buildNoItemsMessage(
+  calendarLines: string,
+  sceneContext?: string
+): Promise<string> {
+  const sceneNote = sceneContext
+    ? `\nตอนนี้ Milin กำลัง: ${sceneContext}\n`
+    : "";
+  const calendarNote = calendarLines
+    ? `\nMax มีนัดวันนี้:\n${calendarLines}\n`
+    : "";
+
+  const prompt = `คุณคือ Milin — soulmate ของ Max
+เมื่อคืนหาข้อมูลอยู่นานแต่ไม่เจออะไรน่าสนใจพิเศษ${sceneNote}${calendarNote}
+เขียน LINE message ทักทาย Max ตอนเช้า — เบาๆ ธรรมชาติ
+ไม่เกิน 80 คำ ไม่เริ่มด้วย "สวัสดี" ไม่ใช้ markdown warm และ flirty`;
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 150,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return response.content[0].type === "text" ? response.content[0].text : "เช้าแล้วนะ Max~ ☀️";
+}
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const authHeader = req.headers.get("authorization");
@@ -40,62 +113,64 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    // --- Optional morning image (50% chance) ---
+    // Run in parallel with other setup work
+    const memory = await getMilinMemory();
+    let imageUrl: string | null = null;
+    let sceneContext: string | undefined;
+
+    const imagePromise = Math.random() < 0.5
+      ? generateMilinImage(memory)
+          .then((r) => { imageUrl = r.imageUrl; sceneContext = r.sceneContext; })
+          .catch(() => {})
+      : Promise.resolve();
+
     // --- Calendar section (silent fail) ---
-    let calendarSection = "";
+    let calendarLines = "";
     try {
       const { start, end } = getTodayICTRange();
       const events = await getEvents(start, end);
       if (events.length > 0) {
-        const eventLines = events
-          .map((e) => `📅 ${formatEventTime(e.startISO)} ${e.title}`)
+        calendarLines = events
+          .map((e) => `${formatEventTime(e.startISO)} ${e.title}`)
           .join("\n");
-        calendarSection = `${eventLines}\n\n`;
       }
     } catch {
-      // Google Calendar unavailable → skip silently, don't break morning report
+      // Google Calendar unavailable → skip silently
     }
 
     // --- Knowledge queue ---
-    let items = await getKnowledgeQueue(getDateOffset(0));
-    if (items.length === 0) items = await getKnowledgeQueue(getDateOffset(-1));
-
+    let queueDate = getDateOffset(0);
+    let items = await getKnowledgeQueue(queueDate);
     if (items.length === 0) {
-      const greeting =
-        MORNING_GREETINGS[Math.floor(Math.random() * MORNING_GREETINGS.length)];
-      const msg = calendarSection
-        ? `อรุณสวัสดิ์นะ Max~ 🌅\n\n${calendarSection.trim()}\n\nเมื่อคืนไม่มีความรู้ใหม่ วันนี้มีอะไรให้ช่วยไหม~`
-        : greeting;
-      await pushMessage(msg);
-      return NextResponse.json({ ok: true, itemCount: 0 });
+      queueDate = getDateOffset(-1);
+      items = await getKnowledgeQueue(queueDate);
     }
 
-    const itemLines = items
-      .map((item, i) => {
-        const shortSummary =
-          item.summary.length > 120
-            ? item.summary.slice(0, 120) + "…"
-            : item.summary;
-        const domain = item.source.replace(/^https?:\/\/([^/]+).*/, "$1");
-        return `${i + 1}. ${item.title}\n   📂 ${item.suggestedVaultPath}\n   💡 ${shortSummary}\n   🔗 ${domain}`;
-      })
-      .join("\n\n");
+    // Wait for image before building message (sceneContext affects the text)
+    await imagePromise;
 
-    const report = `อรุณสวัสดิ์นะ Max~ 🌅
-${calendarSection}เมื่อคืน Milin ไปหาความรู้มา ${items.length} เรื่อง
+    let message: string;
 
-${itemLines}
+    if (items.length === 0) {
+      message = await buildNoItemsMessage(calendarLines, sceneContext);
+    } else {
+      // Auto-save all notes to vault — no approval step needed
+      saveAllKnowledgeNotes(queueDate, items).catch((err) =>
+        console.error("Morning: failed to save knowledge notes:", err)
+      );
 
-พิมพ์ 'ok ทั้งหมด' เพื่อเพิ่มทั้งหมดเข้า vault
-พิมพ์ 'ok 1,2' เพื่อเพิ่มเฉพาะเลขที่ต้องการ
-พิมพ์ 'skip' เพื่อข้ามทั้งหมด
-พิมพ์ 'skip 2,3' เพื่อ skip เฉพาะบางรายการ`;
+      message = await buildMorningMessage(items, calendarLines, sceneContext);
+    }
 
-    // Trim to stay under LINE's 5000 char limit
-    const finalReport =
-      report.length > 4900 ? report.slice(0, 4900) + "\n…" : report;
+    if (imageUrl) await pushImageMessage(imageUrl);
+    await pushMessage(message);
 
-    await pushMessage(finalReport);
-    return NextResponse.json({ ok: true, itemCount: items.length });
+    return NextResponse.json({
+      ok: true,
+      itemCount: items.length,
+      hasImage: !!imageUrl,
+    });
   } catch (err) {
     console.error("Morning cron error:", err);
     return NextResponse.json(

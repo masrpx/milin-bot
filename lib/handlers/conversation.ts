@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { searchVault, updateMilinMemory, type MilinMemory } from "../vault";
+import { searchVault, updateMilinMemory, type MilinMemory, type RecentMessage } from "../vault";
 import {
   buildMilinSystemPrompt,
   buildMemoryExtractPrompt,
@@ -36,11 +36,21 @@ export async function handleConversation(
 
   const systemPrompt = buildMilinSystemPrompt(memory, vaultContext) + contextNote;
 
+  // Build message history: last stored turns + current user message.
+  // History is always valid alternating pairs (stored as user+assistant), so no sanitization needed.
+  const messages: Anthropic.MessageParam[] = [
+    ...(memory.recentMessages || []).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user" as const, content: text },
+  ];
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 800,
     system: systemPrompt,
-    messages: [{ role: "user", content: text }],
+    messages,
   });
 
   const reply =
@@ -95,6 +105,12 @@ async function updateMemoryAsync(
       summary,
       maxMood: extract.maxMood || undefined,
     }];
+
+    // Save this exchange to the rolling conversation window (trimmed to avoid bloat)
+    updates.recentMessages = [
+      { role: "user" as const, content: userMessage.slice(0, 500) },
+      { role: "assistant" as const, content: aiResponse.slice(0, 500) },
+    ];
 
     // Mood update from explicit keywords
     const moodMap: Record<string, string> = {

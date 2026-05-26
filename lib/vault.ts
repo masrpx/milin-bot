@@ -24,6 +24,11 @@ export interface PendingAction {
   expiresAt: string; // ISO — expires after 5 minutes
 }
 
+export interface RecentMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface MilinMemory {
   lastUpdated: string;
   aboutMax: string[];
@@ -33,6 +38,10 @@ export interface MilinMemory {
   currentMood: string;
   relationshipStage: string;
   pendingAction?: PendingAction;
+  // Last 10 messages from actual conversations — always valid alternating user/assistant
+  recentMessages: RecentMessage[];
+  // Latest proactive message Milin sent (from milin-ping cron)
+  milinActivity?: string;
 }
 
 export interface ConversationLog {
@@ -226,6 +235,7 @@ export async function getMilinMemory(): Promise<MilinMemory> {
       topicsAsked: [],
       currentMood: "curious and warm",
       relationshipStage: "สนิทกันมาก",
+      recentMessages: [],
     };
   }
   return parseMilinMemory(file.content);
@@ -293,6 +303,25 @@ function parseMilinMemory(markdown: string): MilinMemory {
     }
   }
 
+  // Parse recent conversation messages (stored as JSON array)
+  const recentMessagesMatch = markdown.match(
+    /## Recent Messages\n```json\n([\s\S]*?)\n```/
+  );
+  let recentMessages: RecentMessage[] = [];
+  if (recentMessagesMatch?.[1]?.trim()) {
+    try {
+      recentMessages = JSON.parse(recentMessagesMatch[1].trim()) as RecentMessage[];
+    } catch {
+      recentMessages = [];
+    }
+  }
+
+  // Parse Milin's latest proactive message (from milin-ping)
+  const milinActivityMatch = markdown.match(
+    /## Milin's Recent Activity\n([\s\S]*?)(?=\n## |$)/
+  );
+  const milinActivity = milinActivityMatch?.[1]?.trim() || undefined;
+
   return {
     lastUpdated: new Date().toISOString(),
     aboutMax: parseListItems(aboutMaxMatch?.[1]),
@@ -302,6 +331,8 @@ function parseMilinMemory(markdown: string): MilinMemory {
     currentMood: moodMatch?.[1]?.trim() || "curious and warm",
     relationshipStage,
     pendingAction,
+    recentMessages,
+    milinActivity,
   };
 }
 
@@ -317,6 +348,7 @@ export async function updateMilinMemory(
         lastUpdated: new Date().toISOString(),
         aboutMax: [], importantConversations: [], learnedPreferences: [],
         topicsAsked: [], currentMood: "curious and warm", relationshipStage: "สนิทกันมาก",
+        recentMessages: [],
       };
 
   const mergeUnique = (a: string[], b: string[], cap: number) =>
@@ -335,6 +367,12 @@ export async function updateMilinMemory(
     count >= 5  ? "เริ่มสนิทกัน" :
                   "เพิ่งเริ่มคุยกัน";
 
+  // Append new message pairs to history, cap at 10 messages (5 pairs)
+  const newRecentMessages = [
+    ...(current.recentMessages || []),
+    ...(updates.recentMessages || []),
+  ].slice(-10);
+
   const merged: MilinMemory = {
     ...current,
     ...updates,
@@ -342,6 +380,8 @@ export async function updateMilinMemory(
     learnedPreferences: mergeUnique(current.learnedPreferences || [], updates.learnedPreferences || [], 30),
     topicsAsked: mergeUnique(current.topicsAsked || [], updates.topicsAsked || [], 20),
     importantConversations: newConvos,
+    recentMessages: newRecentMessages,
+    // milinActivity: updates.milinActivity takes precedence (already covered by ...updates spread above)
     relationshipStage,
     lastUpdated: new Date().toISOString(),
   };
@@ -355,6 +395,11 @@ export async function updateMilinMemory(
 
   const pendingActionSection = merged.pendingAction
     ? `\n## Pending Action\n${JSON.stringify(merged.pendingAction)}\n`
+    : "";
+
+  const recentMessagesJson = JSON.stringify(merged.recentMessages);
+  const milinActivitySection = merged.milinActivity
+    ? `\n## Milin's Recent Activity\n${merged.milinActivity}\n`
     : "";
 
   const content = `---
@@ -378,7 +423,12 @@ ${merged.currentMood}
 
 ## Relationship stage
 ${merged.relationshipStage}
-${pendingActionSection}`;
+
+## Recent Messages
+\`\`\`json
+${recentMessagesJson}
+\`\`\`
+${milinActivitySection}${pendingActionSection}`;
 
   await upsertFile(
     "05 Milin/milin-memory.md",
@@ -478,5 +528,35 @@ ${item.summary}
 
 export async function deleteKnowledgeQueue(date: string): Promise<void> {
   await deleteFile(`05 Milin/knowledge-queue/${date}.md`);
+}
+
+/**
+ * Save all knowledge items as vault notes then delete the queue in one pass.
+ * Faster than calling approveKnowledgeItem() per item (avoids N×2 queue read/writes).
+ */
+export async function saveAllKnowledgeNotes(
+  date: string,
+  items: KnowledgeItem[]
+): Promise<void> {
+  await Promise.all(
+    items.map((item) => {
+      const noteContent = `---
+title: ${item.title}
+source: ${item.source}
+created: ${date}
+tags: [milin-research]
+---
+
+${item.summary}
+
+> Source: ${item.source}
+`;
+      const notePath = `${item.suggestedVaultPath}/${item.title
+        .replace(/[^a-zA-Z0-9ก-๙\s]/g, "")
+        .trim()}.md`;
+      return upsertFile(notePath, noteContent, `milin: add note "${item.title}"`);
+    })
+  );
+  await deleteKnowledgeQueue(date);
 }
 

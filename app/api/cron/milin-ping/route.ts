@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getMilinMemory, searchVault, type MilinMemory } from "@/lib/vault";
+import { getMilinMemory, updateMilinMemory, searchVault, type MilinMemory } from "@/lib/vault";
 import { pushMessage, pushImageMessage } from "@/lib/line";
 import { generateMilinImage } from "@/lib/milin-image";
 
@@ -128,6 +128,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (message) {
       if (imageUrl) await pushImageMessage(imageUrl);
       await pushMessage(message);
+      // Save what Milin said so she can reference it naturally in the next conversation
+      updateMilinMemory({ milinActivity: message }).catch(() => {});
     }
 
     return NextResponse.json({ ok: true, sent: true, type, hasImage: !!imageUrl });

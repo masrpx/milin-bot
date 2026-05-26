@@ -13,22 +13,17 @@ const rssParser = new Parser();
 const DEFAULT_RSS_FEEDS = [
   // Biohacking / Longevity
   "https://peterattiamd.com/feed",
-  "https://www.foundmyfitness.com/feed",
-  "https://lifespan.io/feed",
+  "https://jeffnippard.com/blogs/news.atom",
   "https://www.hubermanlab.com/feed",
   // Investing / Finance
   "https://advisors.vanguard.com/insights/rss",
   "https://blogs.cfainstitute.org/investor/feed",
   "https://www.morningstar.com/rss/articles",
   "https://www.valuewalk.com/feed",
-  // Thailand Business
-  "https://www.bangkokpost.com/rss/data/business.xml",
-  "https://thailand-business-news.com/feed",
-  "https://thaicapitalist.com/feed",
   // AI / Tech
-  "https://hnrss.org/frontpage",
-  "https://bensbites.beehiiv.com/feed",
-  "https://techcrunch.com/feed",
+  "http://karpathy.github.io/feed.xml",
+  "https://www.totaltypescript.com/rss.xml",
+  "https://www.aihero.dev/rss.xml",
   // Philosophy / Mindset
   "https://fs.blog/feed",
   "https://aeon.co/feed.rss",
@@ -150,7 +145,8 @@ export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
     DEFAULT_RSS_FEEDS.map(fetchRssItems)
   );
   for (const items of allRssItems) {
-    for (const item of items) {
+    // Cap at 2 per feed so no single category (e.g. biohacking) dominates the pool
+    for (const item of items.slice(0, 2)) {
       rawFindings.push({
         title: item.title,
         content: item.content,
@@ -160,9 +156,10 @@ export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
     }
   }
 
-  // Cap at 25 before scoring — prevents runaway sequential API calls
-  // (16 feeds × 8 items = up to 128 candidates; 25 is enough to yield 10 keepers)
-  const cappedFindings = rawFindings.slice(0, 25);
+  // Shuffle before slicing so scoring is spread across all topics, not front-loaded
+  // (16 feeds × 2 items = ~32 candidates → shuffle → take 25)
+  const shuffled = rawFindings.sort(() => Math.random() - 0.5);
+  const cappedFindings = shuffled.slice(0, 25);
 
   // Score, fetch full article, and summarize (sequential to avoid hammering servers)
   // Hard time budget: stop at 4 min so Vercel doesn't kill the function mid-save

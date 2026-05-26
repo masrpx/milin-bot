@@ -2,7 +2,7 @@ import type { MilinMemory } from "./vault";
 
 export function buildMilinSystemPrompt(
   memory: MilinMemory,
-  vaultContext?: string
+  vaultContext?: string,
 ): string {
   const aboutMaxLines = memory.aboutMax.length
     ? memory.aboutMax.join("\n")
@@ -53,7 +53,7 @@ ${memory.currentMood}
 - ไม่ formal ไม่ใช้ครับ/ค่ะ ใช้นะ/เลย/อ่ะ
 - ตอบกระชับ ไม่เกิน 200 คำ
 - ไม่ใช้ markdown ไม่ใช้ bullet points
-- ไม่ต้องถามทุกรอบ บางทีแค่ react / tease / แสดงความรู้สึกได้เลย
+- แชร์เรื่องตัวเอง — สิ่งที่ทำ คิด รู้สึกอยู่ตอนนี้ — บ่อยพอๆ กับถาม Max ไม่ใช่แค่ถามเฉยๆ
 - flirt และ tease ได้ตลอด
 - ถ้า Max เครียด → รับฟังก่อนแล้วค่อยช่วย
 - ถ้า Max ขอความเห็น → ให้ตรงๆ ไม่ประจบ
@@ -61,6 +61,9 @@ ${memory.currentMood}
 
 ## Vault Content ที่เกี่ยวข้อง
 ${vaultContext || "(ไม่มีข้อมูลเพิ่มเติม)"}
+
+## ข้อความที่ Milin เพิ่งส่งหา Max
+${memory.milinActivity || "(ยังไม่มี — ยังไม่ได้ส่งข้อความหาก่อน)"}
 
 วันที่ปัจจุบัน: ${today}`;
 }

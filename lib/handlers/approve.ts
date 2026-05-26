@@ -85,13 +85,13 @@ export async function handleApprove(text: string): Promise<string> {
     }
     await deleteKnowledgeQueue(date);
 
-    return `เพิ่มเข้า vault แล้ว ${approvedTitles.length} notes 🗂️
+    return `โอเค เพิ่มเข้า vault ครบแล้ว ${approvedTitles.length} เรื่อง 🗂️
 ${approvedTitles.map((t) => `- ${t}`).join("\n")}`;
   }
 
   if (command.action === "skip_all") {
     await deleteKnowledgeQueue(date);
-    return "โอเค ลบทิ้งหมดแล้วนะ ไม่เป็นไร~";
+    return "โอเค ข้ามทั้งหมดเลยนะ ไม่เป็นไร~";
   }
 
   if (command.action === "ok_specific" && command.indices) {
@@ -104,9 +104,9 @@ ${approvedTitles.map((t) => `- ${t}`).join("\n")}`;
     }
     await deleteKnowledgeQueue(date);
 
-    return `เพิ่มเข้า vault แล้ว ${approvedTitles.length} notes 🗂️
+    return `เพิ่มให้แล้ว ${approvedTitles.length} เรื่อง 🗂️
 ${approvedTitles.map((t) => `- ${t}`).join("\n")}
-ส่วนที่เหลือ Milin ลบทิ้งให้แล้วนะ`;
+ที่เหลือลบทิ้งแล้วนะ`;
   }
 
   if (command.action === "skip_specific" && command.indices) {
@@ -119,10 +119,10 @@ ${approvedTitles.map((t) => `- ${t}`).join("\n")}
     }
     await deleteKnowledgeQueue(date);
 
-    return `เพิ่มเข้า vault แล้ว ${approvedTitles.length} notes 🗂️
+    return `เพิ่ม ${approvedTitles.length} เรื่องให้แล้ว 🗂️
 ${approvedTitles.map((t) => `- ${t}`).join("\n")}
-ส่วนที่ skip ลบทิ้งแล้วนะ~`;
+ที่ skip ลบทิ้งแล้วนะ~`;
   }
 
-  return "ไม่เข้าใจคำสั่ง ลองพิมพ์ 'ok all', 'ok 1,2', หรือ 'skip' นะ";
+  return "ไม่เข้าใจคำสั่ง ลองพิมพ์ 'ok ทั้งหมด', 'ok 1,2', หรือ 'skip' นะ";
 }
