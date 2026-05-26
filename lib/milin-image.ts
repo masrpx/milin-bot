@@ -39,6 +39,8 @@ The image should feel natural, spontaneous, and slightly imperfect, like a real 
 
 Use realistic skin texture, natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles. The outfit should be quite revealing.
 
+Sometimes show the person actively taking the selfie — arm extended toward the camera, phone partially visible in the corner of the frame, front-camera angle slightly above eye level, as if caught mid-snap.
+
 The lighting should feel natural and believable — daylight from windows, outdoor sunlight, warm indoor lighting, street lights, cafe ambience, etc. The composition should feel human and unplanned, as if someone casually took the photo during a normal moment.
 
 Style: ultra-realistic, candid photography, natural phone-camera quality, imperfect realism, everyday atmosphere, handheld selfie feel, no beauty filter, no heavy retouching, authentic and believable.`;
