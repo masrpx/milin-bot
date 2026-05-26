@@ -136,8 +136,10 @@ Parse this Thai calendar request and return JSON only:
 }
 
 Date/time rules:
+- EXPLICIT DATE TAKES PRIORITY: if the message contains a day number + month name (e.g. "5 มิย", "15 มีนาคม", "3 ก.ค."), use that exact date — do NOT apply the "coming Friday/Saturday" heuristic. A day name like "วันศุกร์" alongside an explicit date is just confirmation, not the date source.
+- Thai month names: ม.ค./มกราคม=01, ก.พ./กุมภาพันธ์=02, มี.ค./มีนาคม=03, เม.ย./เมษายน=04, พ.ค./พฤษภาคม=05, มิ.ย./มิถุนายน/มิย=06, ก.ค./กรกฎาคม=07, ส.ค./สิงหาคม=08, ก.ย./กันยายน=09, ต.ค./ตุลาคม=10, พ.ย./พฤศจิกายน=11, ธ.ค./ธันวาคม=12
 - วันนี้=today, พรุ่งนี้=tomorrow, มะรืน=day after tomorrow
-- ศุกร์นี้=coming Friday (if today>=Fri, use next week)
+- ศุกร์นี้=coming Friday (only when NO explicit date given; if today>=Fri use next week)
 - อาทิตย์นี้/สัปดาห์นี้=Mon-Sun of current week
 - สัปดาห์หน้า=next Mon-Sun
 - 9 โมง/9 นาฬิกา=09:00, บ่ายโมง=13:00, บ่ายสาม=15:00, เที่ยง=12:00, ทุ่มหนึ่ง=19:00
@@ -148,7 +150,9 @@ Date/time rules:
 - All times in +07:00 offset
 
 ${COLOR_THEME_DESCRIPTION}
-For create intent only: set colorId to the matching number, or null if unsure.
+For create intent only:
+- If the message contains an explicit color name (e.g. "สี orange", "สีแดง", "color red"), map it directly to colorId — this overrides category inference. Mapping: orange/ส้ม=6, red/แดง=10, yellow/เหลือง=5, green/เขียว=9, blue/ฟ้า=7, navy/น้ำเงิน=8, gray/grey/เทา=11, lavender/ม่วงอ่อน=1, purple/ม่วง=3, pink/ชมพู=4.
+- Otherwise infer from the category rules above, or return null if unsure.
 For all other intents: colorId must be null.`,
         },
       ],

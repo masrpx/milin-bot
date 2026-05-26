@@ -106,9 +106,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // Try with image; fall back to text-only if image generation fails
   let imageUrl: string | null = null;
   let sceneContext: string | undefined;
+  let imageOutfit: string | undefined;
 
   try {
-    ({ imageUrl, sceneContext } = await generateMilinImage(memory));
+    ({ imageUrl, sceneContext, outfit: imageOutfit } = await generateMilinImage(memory));
   } catch (err) {
     console.error("Milin ping: image generation failed, sending text only:", err);
   }
@@ -128,8 +129,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (message) {
       if (imageUrl) await pushImageMessage(imageUrl);
       await pushMessage(message);
-      // Save what Milin said so she can reference it naturally in the next conversation
-      updateMilinMemory({ milinActivity: message }).catch(() => {});
+      // Save what Milin said + what she was wearing in the image (if any),
+      // so she can reference her outfit naturally when Max reacts to the photo.
+      const activityEntry = imageUrl && imageOutfit
+        ? `${message}\n[ส่งรูปไปด้วย — ใส่ ${imageOutfit}]`
+        : message;
+      updateMilinMemory({ milinActivity: activityEntry }).catch(() => {});
     }
 
     return NextResponse.json({ ok: true, sent: true, type, hasImage: !!imageUrl });

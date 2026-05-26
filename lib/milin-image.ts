@@ -28,7 +28,7 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
   return { contentType: "image/png", ext: "png" };
 }
 
-type SceneSlot = { prompt: string; sceneContext: string };
+type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
 // Base prompt template — [SCENE], [OUTFIT], [MOOD] are replaced at runtime.
 // Separating the three factors lets us randomize them independently, giving
@@ -160,14 +160,14 @@ function pickScene(bangkokHour: number): SceneSlot {
     .replace("[OUTFIT]", outfit)
     .replace("[MOOD]",   mood);
 
-  return { prompt, sceneContext: scene.th };
+  return { prompt, sceneContext: scene.th, outfit };
 }
 
 export async function generateMilinImage(
   memory: MilinMemory
-): Promise<{ imageUrl: string; sceneContext: string }> {
+): Promise<{ imageUrl: string; sceneContext: string; outfit: string }> {
   const bangkokHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
-  const { prompt, sceneContext } = pickScene(bangkokHour);
+  const { prompt, sceneContext, outfit } = pickScene(bangkokHour);
 
   // Read reference image from filesystem — no URL, no expiry
   const baseBuffer = fs.readFileSync(REFERENCE_IMAGE_PATH);
@@ -206,5 +206,5 @@ export async function generateMilinImage(
     access: "public",
   });
 
-  return { imageUrl: blob.url, sceneContext };
+  return { imageUrl: blob.url, sceneContext, outfit };
 }
