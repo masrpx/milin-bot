@@ -30,85 +30,135 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
 
 type SceneSlot = { prompt: string; sceneContext: string };
 
-// Curated pool of borderline scenes with pre-tested prompt language.
-// Free-form Haiku generation was intermittently using flagged words ("sensual", "intimate")
-// which triggered OpenAI's safety filter. These prompts use specific, consistent language
-// that stays reliably just under the line.
-const SCENE_POOL: SceneSlot[] = [
-  // Pool / beach
-  {
-    prompt: "Young woman in a string bikini sitting on the edge of a rooftop infinity pool in Bangkok, golden hour light, city skyline in background, relaxed confident pose, candid lifestyle photo.",
-    sceneContext: "นั่งเล่นอยู่ริมสระบนดาดฟ้า",
-  },
-  {
-    prompt: "Young woman in a white bikini lying on a sun lounger by a hotel pool, Bangkok, bright afternoon light, sunglasses, looking at phone, candid photo.",
-    sceneContext: "อาบแดดอยู่ริมสระ",
-  },
-  {
-    prompt: "Young woman in a bikini standing waist-deep in a clear pool, Bangkok rooftop, late afternoon golden light, looking back over shoulder at camera, candid.",
-    sceneContext: "เล่นน้ำอยู่ในสระ",
-  },
-  // Gym / workout
-  {
-    prompt: "Young woman in a sports bra and high-waist leggings at a modern Bangkok gym, doing stretches on a yoga mat, confident pose, natural gym lighting, candid lifestyle shot.",
-    sceneContext: "สเตรชอยู่ที่ยิม",
-  },
-  {
-    prompt: "Young woman in a crop sports bra and shorts at a gym mirror, post-workout, relaxed confident expression, Bangkok fitness studio, natural lighting.",
-    sceneContext: "เพิ่งออกกำลังกายเสร็จ",
-  },
-  // Night out / dressed up
-  {
-    prompt: "Young woman in a fitted mini dress at a Bangkok rooftop bar at night, city lights behind her, cocktail in hand, confident smile, warm ambient lighting.",
-    sceneContext: "ออกไปดริ๊งค์ที่รูฟท็อปบาร์",
-  },
-  {
-    prompt: "Young woman in a backless dress at a stylish Bangkok restaurant, evening, soft warm lighting, looking over her shoulder, candid portrait.",
-    sceneContext: "ออกไปดินเนอร์",
-  },
-  {
-    prompt: "Young woman in a short spaghetti-strap slip dress at a rooftop party Bangkok, string lights, night atmosphere, relaxed pose, candid photo.",
-    sceneContext: "ไปงานปาร์ตี้บนดาดฟ้า",
-  },
-  // Casual at home (living area, not bedroom)
-  {
-    prompt: "Young woman in an oversized shirt and shorts on a Bangkok apartment balcony at night, city lights view, sitting cross-legged on a chair, looking relaxed, soft warm light.",
-    sceneContext: "นั่งเล่นอยู่บนระเบียง",
-  },
-  {
-    prompt: "Young woman in a crop top and shorts in a modern Bangkok apartment living room, morning light, lying on the sofa reading a book, candid lifestyle.",
-    sceneContext: "นอนอ่านหนังสืออยู่ในห้อง",
-  },
-  // Beach / travel
-  {
-    prompt: "Young woman in a bikini walking along a Thai beach at sunset, warm golden light, waves in background, candid travel photo, looking back at camera.",
-    sceneContext: "เดินเล่นอยู่ริมทะเล",
-  },
-  {
-    prompt: "Young woman in a colourful bikini sitting on beach rocks in Thailand, blue water behind her, natural sunlight, candid portrait.",
-    sceneContext: "นั่งเล่นอยู่บนโขดหิน",
-  },
-  // Spa / relaxing
-  {
-    prompt: "Young woman wrapped in a white spa towel at a luxury Bangkok spa, relaxed expression, soft lighting, tropical setting, wellness lifestyle photo.",
-    sceneContext: "นวดสปาอยู่",
-  },
-  // Cafe / city (tame but stylish)
-  {
-    prompt: "Young woman in a crop top and short skirt at a trendy Bangkok cafe, afternoon light, coffee on the table, candid lifestyle portrait.",
-    sceneContext: "นั่งกาแฟอยู่ที่คาเฟ่",
-  },
-];
+// Base prompt template — [SCENE], [OUTFIT], [MOOD] are replaced at runtime.
+// Separating the three factors lets us randomize them independently, giving
+// 7³ = 343 unique combinations per time period instead of ~5 fixed scenes.
+const BASE_PROMPT = `Create a realistic casual selfie or candid photo of the specified person in [SCENE], wearing [OUTFIT], with a [MOOD] expression.
+
+The image should feel natural, spontaneous, and slightly imperfect, like a real everyday moment captured quickly with a phone camera. Keep the person clearly recognizable, but avoid making the image look like a professional photoshoot, influencer post, or AI-generated beauty portrait.
+
+Use realistic skin texture, natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles. The outfit should be quite revealing.
+
+The lighting should feel natural and believable — daylight from windows, outdoor sunlight, warm indoor lighting, street lights, cafe ambience, etc. The composition should feel human and unplanned, as if someone casually took the photo during a normal moment.
+
+Style: ultra-realistic, candid photography, natural phone-camera quality, imperfect realism, everyday atmosphere, handheld selfie feel, no beauty filter, no heavy retouching, authentic and believable.`;
+
+type TimePool = {
+  scenes: { en: string; th: string }[];
+  outfits: string[];
+  moods: string[];
+};
+
+const MORNING_POOL: TimePool = {
+  scenes: [
+    { en: "sunlit cafe window seat",             th: "นั่งอยู่ที่คาเฟ่แสงแดดยามเช้า" },
+    { en: "hotel balcony after waking up",        th: "ตื่นนอนมายืนอยู่ที่ระเบียงโรงแรม" },
+    { en: "morning walk in the park",             th: "เดินเล่นอยู่ในสวนยามเช้า" },
+    { en: "kitchen making coffee",                th: "ชงกาแฟอยู่ในครัว" },
+    { en: "beachside breakfast table",            th: "นั่งกินอาหารเช้าริมทะเล" },
+    { en: "casual mirror selfie before going out",th: "เซลฟี่หน้ากระจกก่อนออกไปข้างนอก" },
+    { en: "reading near a bedroom window",        th: "อ่านหนังสืออยู่ริมหน้าต่าง" },
+  ],
+  outfits: [
+    "oversized white shirt",
+    "fitted crop top with loose shorts",
+    "soft tank top and pajama shorts",
+    "sporty yoga set",
+    "casual summer dress",
+    "lightweight cardigan over camisole",
+    "off-shoulder knit sweater",
+  ],
+  moods: [
+    "sleepy soft smile",
+    "relaxed morning face",
+    "playful and fresh",
+    "cozy and calm",
+    "naturally happy",
+    "dreamy gaze",
+    "casual confidence",
+  ],
+};
+
+const AFTERNOON_POOL: TimePool = {
+  scenes: [
+    { en: "outdoor brunch cafe",                          th: "นั่งบรันช์คาเฟ่กลางแจ้ง" },
+    { en: "shopping mall mirror selfie",                  th: "เซลฟี่หน้ากระจกในห้าง" },
+    { en: "rooftop poolside",                             th: "นั่งเล่นอยู่ริมสระบนดาดฟ้า" },
+    { en: "bookstore cafe corner",                        th: "นั่งอยู่ในร้านหนังสือ" },
+    { en: "city street walk",                             th: "เดินเล่นอยู่กลางเมือง" },
+    { en: "gym break selfie",                             th: "หยุดพักระหว่างออกกำลังกาย" },
+    { en: "sitting in a parked car during golden hour",   th: "นั่งอยู่ในรถช่วงแสงทอง" },
+  ],
+  outfits: [
+    "fitted tank top and jeans",
+    "sporty matching workout set",
+    "sleeveless summer dress",
+    "denim jacket over crop top",
+    "casual fitted T-shirt and skirt",
+    "ribbed sleeveless top",
+    "elegant casual blouse with shorts",
+  ],
+  moods: [
+    "playful smirk",
+    "warm smile",
+    "carefree energy",
+    "relaxed and confident",
+    "thoughtful but soft",
+    "subtly flirty",
+    "naturally candid",
+  ],
+};
+
+const NIGHT_POOL: TimePool = {
+  scenes: [
+    { en: "rooftop dinner at night",           th: "ออกไปดินเนอร์บนดาดฟ้า" },
+    { en: "luxury hotel mirror selfie",        th: "เซลฟี่หน้ากระจกในโรงแรมหรู" },
+    { en: "soft-lit apartment living room",    th: "นั่งเล่นอยู่ในห้องนั่งเล่น" },
+    { en: "late-night convenience store stop", th: "แวะร้านสะดวกซื้อดึกๆ" },
+    { en: "evening city lights background",    th: "ถ่ายรูปหน้าวิวเมืองตอนกลางคืน" },
+    { en: "elegant restaurant table",          th: "ออกไปกินข้าวที่ร้านหรู" },
+    { en: "quiet balcony at night",            th: "นั่งอยู่บนระเบียงตอนกลางคืน" },
+  ],
+  outfits: [
+    "satin slip dress",
+    "black fitted blazer outfit",
+    "elegant backless dress",
+    "silk camisole with cardigan",
+    "fitted long-sleeve dress",
+    "stylish off-shoulder top",
+    "soft loungewear set",
+  ],
+  moods: [
+    "quiet confidence",
+    "soft seductive smile",
+    "calm and elegant",
+    "intimate eye contact",
+    "relaxed evening mood",
+    "mysterious expression",
+    "gentle playful look",
+  ],
+};
+
+function rand<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 function pickScene(bangkokHour: number): SceneSlot {
-  // Weight pool vs beach scenes by time of day, but mostly just random
-  const pool = [...SCENE_POOL];
-  // Night hours (20–23, 0–5): prefer indoor/rooftop/night-out scenes (indices 6-9)
-  if (bangkokHour >= 20 || bangkokHour < 6) {
-    const nightScenes = pool.slice(6, 10);
-    return nightScenes[Math.floor(Math.random() * nightScenes.length)];
-  }
-  return pool[Math.floor(Math.random() * pool.length)];
+  const pool =
+    bangkokHour >= 20 || bangkokHour < 6 ? NIGHT_POOL :
+    bangkokHour < 12                      ? MORNING_POOL :
+                                            AFTERNOON_POOL;
+
+  const scene  = rand(pool.scenes);
+  const outfit = rand(pool.outfits);
+  const mood   = rand(pool.moods);
+
+  const prompt = BASE_PROMPT
+    .replace("[SCENE]",  scene.en)
+    .replace("[OUTFIT]", outfit)
+    .replace("[MOOD]",   mood);
+
+  return { prompt, sceneContext: scene.th };
 }
 
 export async function generateMilinImage(
