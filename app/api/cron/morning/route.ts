@@ -74,7 +74,7 @@ ${itemsText}
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 400,
+    max_tokens: 700,
     messages: [{ role: "user", content: prompt }],
   });
 
