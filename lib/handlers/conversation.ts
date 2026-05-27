@@ -46,10 +46,19 @@ export async function handleConversation(
     { role: "user" as const, content: text },
   ];
 
+  // System prompt cached as one ephemeral block. Cache hits when Max sends
+  // back-to-back messages within 5 min — updateMemoryAsync is fire-and-forget
+  // so the prompt is often identical between consecutive messages in a session.
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 800,
-    system: systemPrompt,
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages,
   });
 

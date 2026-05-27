@@ -241,7 +241,7 @@ export async function getMilinMemory(): Promise<MilinMemory> {
   return parseMilinMemory(file.content);
 }
 
-function parseMilinMemory(markdown: string): MilinMemory {
+export function parseMilinMemory(markdown: string): MilinMemory {
   const aboutMaxMatch = markdown.match(
     /## สิ่งที่รู้เกี่ยวกับ Max\n([\s\S]*?)(?=\n## )/
   );
