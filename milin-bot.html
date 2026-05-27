@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Milin Bot</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f0f13; color: #e0e0e0; padding: 32px 16px; }
+  .container { max-width: 720px; margin: 0 auto; }
+
+  h1 { font-size: 1.6rem; color: #fff; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 0.85rem; margin-bottom: 32px; }
+
+  h2 { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+       color: #666; margin-bottom: 12px; }
+
+  .section { margin-bottom: 28px; }
+
+  /* Capability chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: #1a1a24; border: 1px solid #2a2a38; border-radius: 20px;
+          padding: 5px 14px; font-size: 0.8rem; color: #c8c8e0; }
+  .chip span { margin-right: 6px; }
+
+  /* Arch flow */
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .box { background: #1a1a24; border: 1px solid #2a2a38; border-radius: 8px;
+         padding: 6px 12px; font-size: 0.78rem; color: #b0b0cc; white-space: nowrap; }
+  .box.purple { border-color: #5a4a8a; color: #c4a8ff; }
+  .box.teal   { border-color: #2a5a5a; color: #7ee8cc; }
+  .box.amber  { border-color: #5a4a1a; color: #ffd080; }
+  .arr { color: #444; font-size: 0.9rem; }
+
+  /* Crons */
+  .crons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cron { background: #1a1a24; border: 1px solid #2a2a38; border-radius: 8px; padding: 10px 12px; }
+  .cron .time { font-size: 0.7rem; color: #666; margin-bottom: 3px; }
+  .cron .label { font-size: 0.8rem; color: #c8c8e0; }
+
+  /* Stack row */
+  .stack { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag { background: #14141e; border: 1px solid #252535; border-radius: 6px;
+         padding: 4px 10px; font-size: 0.75rem; color: #8080a0; }
+  .tag b { color: #a0a0c8; font-weight: 600; }
+
+  /* Tests badge */
+  .badge { display: inline-block; background: #0f2a1a; border: 1px solid #1a5a30;
+           color: #60d080; border-radius: 6px; padding: 3px 10px; font-size: 0.75rem; }
+  .divider { border: none; border-top: 1px solid #1e1e2a; margin: 28px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Milin Bot 💜</h1>
+  <p class="sub">AI soulmate for Max · LINE · Vercel · Claude Sonnet 4.6</p>
+
+  <!-- What Milin can do -->
+  <div class="section">
+    <h2>สิ่งที่ Milin ทำได้</h2>
+    <div class="chips">
+      <div class="chip"><span>💬</span>คุยธรรมชาติ (Sonnet, memory 10 msg)</div>
+      <div class="chip"><span>📅</span>จัดการ Google Calendar (CRUD)</div>
+      <div class="chip"><span>📸</span>ส่งรูปตัวเอง (gpt-image-2)</div>
+      <div class="chip"><span>📝</span>จด: บันทึก Vault</div>
+      <div class="chip"><span>🔗</span>สรุป URL / บทความยาว</div>
+      <div class="chip"><span>🔍</span>ค้น Obsidian Vault</div>
+      <div class="chip"><span>🌅</span>ทักทายตอนเช้า + แจ้ง research</div>
+      <div class="chip"><span>💌</span>ส่งข้อความหา Max เอง (ping)</div>
+      <div class="chip"><span>📰</span>วิจัย RSS ทุกคืน (AI score + summarize)</div>
+      <div class="chip"><span>🗂️</span>Auto-organize vault (PARA)</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Message flow -->
+  <div class="section">
+    <h2>Message Flow</h2>
+    <div class="flow">
+      <div class="box">LINE Webhook</div>
+      <div class="arr">→</div>
+      <div class="box purple">routeMessage()</div>
+      <div class="arr">→</div>
+      <div class="box teal">Handler</div>
+      <div class="arr">→</div>
+      <div class="box">Claude API</div>
+      <div class="arr">→</div>
+      <div class="box amber">LINE Reply</div>
+    </div>
+    <br>
+    <div class="flow" style="margin-top:6px;">
+      <div class="box" style="font-size:0.72rem;color:#666;">Priority 1 approve</div>
+      <div class="arr">→</div>
+      <div class="box" style="font-size:0.72rem;color:#666;">2 color reply</div>
+      <div class="arr">→</div>
+      <div class="box" style="font-size:0.72rem;color:#666;">3 ยืนยัน</div>
+      <div class="arr">→</div>
+      <div class="box" style="font-size:0.72rem;color:#666;">4 จด:</div>
+      <div class="arr">→</div>
+      <div class="box" style="font-size:0.72rem;color:#666;">5 URL/long</div>
+      <div class="arr">→</div>
+      <div class="box" style="font-size:0.72rem;color:#666;">6 Haiku classify</div>
+      <div class="arr">→</div>
+      <div class="box" style="font-size:0.72rem;color:#666;">7 chat</div>
+    </div>
+  </div>
+
+  <!-- Cron Jobs -->
+  <div class="section">
+    <h2>Cron Jobs (ICT)</h2>
+    <div class="crons">
+      <div class="cron"><div class="time">01:00 daily</div><div class="label">🔬 RSS research → vault queue</div></div>
+      <div class="cron"><div class="time">07:00 daily</div><div class="label">🌅 Morning message + auto-save notes</div></div>
+      <div class="cron"><div class="time">13:00 daily</div><div class="label">💌 Milin ping (60% chance + image)</div></div>
+      <div class="cron"><div class="time">19:00 daily</div><div class="label">💌 Milin evening ping (60%)</div></div>
+      <div class="cron"><div class="time">01:30 every 2d</div><div class="label">🗂️ Auto-organize Inbox → PARA</div></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Tech stack -->
+  <div class="section">
+    <h2>Stack</h2>
+    <div class="stack">
+      <div class="tag"><b>Next.js 16</b> App Router</div>
+      <div class="tag"><b>Vercel</b> Fluid Compute + Cron</div>
+      <div class="tag"><b>Claude Sonnet 4.6</b> conversation</div>
+      <div class="tag"><b>Claude Haiku 4.5</b> classify / extract</div>
+      <div class="tag"><b>gpt-image-2</b> image edit</div>
+      <div class="tag"><b>GitHub</b> Obsidian vault (PARA)</div>
+      <div class="tag"><b>Google Calendar API</b></div>
+      <div class="tag"><b>Vercel Blob</b> image hosting</div>
+      <div class="tag"><b>Prompt caching</b> cache_control ephemeral</div>
+    </div>
+  </div>
+
+  <!-- Memory -->
+  <div class="section">
+    <h2>Memory System</h2>
+    <div class="chips">
+      <div class="chip"><span>🧠</span>aboutMax (30 facts)</div>
+      <div class="chip"><span>❤️</span>learnedPreferences (30)</div>
+      <div class="chip"><span>📚</span>topicsAsked (20)</div>
+      <div class="chip"><span>🗒️</span>importantConversations (30)</div>
+      <div class="chip"><span>💭</span>recentMessages window (10 msg)</div>
+      <div class="chip"><span>😊</span>currentMood · relationshipStage</div>
+    </div>
+    <p style="font-size:0.75rem;color:#555;margin-top:10px;">
+      Stored in <code style="color:#777">05 Milin/milin-memory.md</code> · updated async by Haiku after every conversation
+    </p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Tests -->
+  <div class="section">
+    <h2>Quality</h2>
+    <span class="badge">✓ 46 tests passing · Vitest</span>
+    <p style="font-size:0.75rem;color:#555;margin-top:8px;">
+      verifyLineSignature · parseMilinMemory round-trip · buildMilinSystemPrompt snapshot · routeMessage priority table
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
