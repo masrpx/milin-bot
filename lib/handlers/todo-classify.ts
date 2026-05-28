@@ -68,16 +68,20 @@ User's classification reply: "${reply}"
 
 Parse into JSON array. Each object: {"index": N, "action": "ndn"|"nvdn"|"calendar"|"delete", "timePhrase": "..."}
 - timePhrase only for "calendar" action (e.g. "พฤหัส 14.00", "พรุ่งนี้ 9 โมง")
+- If multiple indices share the same action (e.g. "1,2 delete" or "1 2 ndn"), expand into one object per index
+- "del" means "delete"
 - Only include items the user mentioned
 - Return JSON array only, no explanation`,
         },
       ],
     });
     const raw = res.content[0].type === "text" ? res.content[0].text : "[]";
-    const parsed = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || "[]") as ClassifyAction[];
-    return parsed.filter(
-      (a) => a.index >= 1 && a.index <= items.length && ["ndn", "nvdn", "calendar", "delete"].includes(a.action)
-    );
+    const parsed = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || "[]") as (Omit<ClassifyAction, "action"> & { action: string })[];
+    return parsed
+      .map((a) => ({ ...a, action: a.action === "del" ? "delete" : a.action } as ClassifyAction))
+      .filter(
+        (a) => a.index >= 1 && a.index <= items.length && ["ndn", "nvdn", "calendar", "delete"].includes(a.action)
+      );
   } catch {
     return [];
   }
