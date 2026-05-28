@@ -37,13 +37,13 @@ const BASE_PROMPT = `Create a realistic casual selfie or candid photo of the spe
 
 The image should feel natural, spontaneous, and slightly imperfect, like a real everyday moment captured quickly with a phone camera. Keep the person clearly recognizable, but avoid making the image look like a professional photoshoot, influencer post, or AI-generated beauty portrait.
 
-Use realistic skin texture, natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles.
+Use natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles.
 
 Sometimes show the person actively taking the selfie — arm extended toward the camera, phone partially visible in the corner of the frame, front-camera angle slightly above eye level, as if caught mid-snap.
 
 The lighting should feel natural and believable — daylight from windows, outdoor sunlight, warm indoor lighting, street lights, cafe ambience, etc. The composition should feel human and unplanned, as if someone casually took the photo during a normal moment.
 
-Style: ultra-realistic, candid photography, natural phone-camera quality, imperfect realism, everyday atmosphere, handheld selfie feel, no beauty filter, no heavy retouching, authentic and believable.`;
+Style: photorealistic, candid photography, natural phone-camera quality, imperfect realism, everyday atmosphere, handheld selfie feel, no beauty filter, no heavy retouching, authentic and believable.`;
 
 type TimePool = {
   scenes: { en: string; th: string }[];
@@ -63,12 +63,12 @@ const MORNING_POOL: TimePool = {
   ],
   outfits: [
     "oversized white shirt",
-    "fitted crop top with loose shorts",
+    "casual fitted top with loose shorts",
     "cozy oversized T-shirt and shorts",
     "sporty yoga set",
     "casual summer dress",
-    "lightweight cardigan over camisole",
-    "off-shoulder knit sweater",
+    "lightweight cardigan over a simple top",
+    "cozy crew-neck knit sweater",
   ],
   moods: [
     "sleepy soft smile",
@@ -85,19 +85,19 @@ const AFTERNOON_POOL: TimePool = {
   scenes: [
     { en: "outdoor brunch cafe",                          th: "นั่งบรันช์คาเฟ่กลางแจ้ง" },
     { en: "shopping mall mirror selfie",                  th: "เซลฟี่หน้ากระจกในห้าง" },
-    { en: "rooftop poolside",                             th: "นั่งเล่นอยู่ริมสระบนดาดฟ้า" },
+    { en: "rooftop terrace cafe",                          th: "นั่งเล่นอยู่บนดาดฟ้า" },
     { en: "bookstore cafe corner",                        th: "นั่งอยู่ในร้านหนังสือ" },
     { en: "city street walk",                             th: "เดินเล่นอยู่กลางเมือง" },
     { en: "gym break selfie",                             th: "หยุดพักระหว่างออกกำลังกาย" },
     { en: "sitting in a parked car during golden hour",   th: "นั่งอยู่ในรถช่วงแสงทอง" },
   ],
   outfits: [
-    "fitted tank top and jeans",
+    "casual tank top and jeans",
     "sporty matching workout set",
     "sleeveless summer dress",
-    "denim jacket over crop top",
+    "denim jacket over simple top",
     "casual fitted T-shirt and skirt",
-    "ribbed sleeveless top",
+    "casual ribbed top",
     "elegant casual blouse with shorts",
   ],
   moods: [
@@ -122,12 +122,12 @@ const NIGHT_POOL: TimePool = {
     { en: "quiet balcony at night",            th: "นั่งอยู่บนระเบียงตอนกลางคืน" },
   ],
   outfits: [
-    "satin wrap dress",
+    "flowy wrap dress",
     "black fitted blazer outfit",
     "elegant midi dress",
-    "silk camisole with cardigan",
+    "cozy knit top with cardigan",
     "fitted long-sleeve dress",
-    "stylish off-shoulder top",
+    "stylish evening blouse",
     "soft loungewear set",
   ],
   moods: [
