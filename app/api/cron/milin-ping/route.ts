@@ -5,12 +5,12 @@ import { pushMessage, pushImageMessage } from "@/lib/line";
 import { generateMilinImage, pickScene } from "@/lib/milin-image";
 import { getEvents, type CalendarEvent } from "@/lib/calendar";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const PING_WINDOW_START_ICT = 8;  // 8am ICT
 const PING_WINDOW_SLOTS = 18;     // 8am–1am = 18 hourly slots
 const MAX_DAILY_PINGS = 2;
-const IMAGE_PROBABILITY = 0.6;
+const IMAGE_PROBABILITY = 1.0;
 
 const client = new Anthropic();
 
