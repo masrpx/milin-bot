@@ -10,7 +10,7 @@ export const maxDuration = 300;
 const PING_WINDOW_START_ICT = 8;  // 8am ICT
 const PING_WINDOW_SLOTS = 18;     // 8am–1am = 18 hourly slots
 const MAX_DAILY_PINGS = 2;
-const IMAGE_PROBABILITY = 1.0;
+const IMAGE_PROBABILITY = 0.6;
 
 const client = new Anthropic();
 
@@ -162,7 +162,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const probability = Math.min(1, remainingPings / remainingSlots);
-  void probability;
+  if (Math.random() > probability) {
+    return NextResponse.json({ ok: true, sent: false });
+  }
 
   const type = pickMessageType();
   const pickedScene = pickScene(hour);
