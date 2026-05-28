@@ -39,7 +39,7 @@ The image should feel natural, spontaneous, and slightly imperfect, like a real 
 
 Use natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles.
 
-Sometimes show the person actively taking the selfie — arm extended toward the camera, phone partially visible in the corner of the frame, front-camera angle slightly above eye level, as if caught mid-snap.
+Sometimes show the person actively taking the selfie — arm extended toward the camera, front-camera angle slightly above eye level, as if caught mid-snap.
 
 The lighting should feel natural and believable — daylight from windows, outdoor sunlight, warm indoor lighting, street lights, cafe ambience, etc. The composition should feel human and unplanned, as if someone casually took the photo during a normal moment.
 
@@ -94,10 +94,10 @@ const AFTERNOON_POOL: TimePool = {
   outfits: [
     "casual tank top and jeans",
     "sporty matching workout set",
-    "sleeveless summer dress",
+    "summer dress",
     "denim jacket over simple top",
-    "casual fitted T-shirt and skirt",
-    "casual ribbed top",
+    "formal working suit",
+    "casual romper",
     "elegant casual blouse with shorts",
   ],
   moods: [
@@ -122,11 +122,11 @@ const NIGHT_POOL: TimePool = {
     { en: "quiet balcony at night",            th: "นั่งอยู่บนระเบียงตอนกลางคืน" },
   ],
   outfits: [
-    "flowy wrap dress",
-    "black fitted blazer outfit",
+    "super casual t-shirt",
+    "black blazer outfit",
     "elegant midi dress",
     "cozy knit top with cardigan",
-    "fitted long-sleeve dress",
+    "long-sleeve dress",
     "stylish evening blouse",
     "soft loungewear set",
   ],
