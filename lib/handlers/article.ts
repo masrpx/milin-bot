@@ -31,7 +31,7 @@ export async function handleArticle(
 
   const prompt = `อ่านบทความนี้และแตกเป็น atomic notes
 แต่ละ note ควรมี 1 concept ที่ชัดเจน
-Max สนใจ: Dhamma, Biohacking, Business, Finance, Psychology, Gaming, AI
+แม็ก สนใจ: Dhamma, Biohacking, Business, Finance, Psychology, Gaming, AI
 
 Vault structure (PARA):
 - 01 Projects, 02 Areas, 03 Resources, 04 Archives, 05 Milin
@@ -43,7 +43,7 @@ Vault structure (PARA):
     "title": "ชื่อ note",
     "summary": "สรุปเนื้อหา 2-3 ประโยค",
     "suggestedVaultPath": "เช่น 03 Resources/Biohacking",
-    "relevanceReason": "เกี่ยวกับ Max ยังไง"
+    "relevanceReason": "เกี่ยวกับ แม็ก ยังไง"
   }
 ]
 
@@ -91,6 +91,6 @@ ${articleText.slice(0, 6000)}`;
   await saveToKnowledgeQueue(today, items);
 
   return `อ่านให้แล้วนะ แตกออกมาได้ ${items.length} notes
-พรุ่งนี้เช้า Milin จะรายงานให้ดู
+พรุ่งนี้เช้า มิลิน จะรายงานให้ดู
 ถ้าชอบค่อยลงใน vault 🗂️`;
 }

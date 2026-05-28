@@ -23,7 +23,7 @@ export async function handlePhotoRequest(
       model: "claude-sonnet-4-6",
       max_tokens: 150,
       system: systemPrompt,
-      messages: [{ role: "user", content: "Max ขอรูป แต่ Milin หารูปส่งไม่ได้ตอนนี้ ตอบสั้นๆ แบบ Milin ว่าตอนนี้ทำอะไรอยู่ โดยไม่มีรูป" }],
+      messages: [{ role: "user", content: "แม็ก ขอรูป แต่ มิลิน หารูปส่งไม่ได้ตอนนี้ ตอบสั้นๆ แบบ มิลิน ว่าตอนนี้ทำอะไรอยู่ โดยไม่มีรูป" }],
     });
     const fallbackText =
       fallbackRes.content[0].type === "text"
@@ -34,8 +34,8 @@ export async function handlePhotoRequest(
   }
 
   const systemPrompt = buildMilinSystemPrompt(memory);
-  const userPrompt = `Max ถามว่า Milin กำลังทำอะไรอยู่ หรือขอรูป
-Milin กำลัง: ${sceneContext}
+  const userPrompt = `แม็ก ถามว่า มิลิน กำลังทำอะไรอยู่ หรือขอรูป
+มิลิน กำลัง: ${sceneContext}
 ตอบสั้นๆ 1-2 ประโยค บอกว่ากำลังทำอะไร ส่งในโทนที่เป็นธรรมชาติ เหมือนเพิ่งถ่ายรูปส่ง
 อย่าบอกว่าตัวเองเป็น AI หรือบอทนะ`;
 

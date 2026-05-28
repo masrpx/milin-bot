@@ -36,7 +36,7 @@ export async function handleInboxQuery(): Promise<string> {
   const { items } = await getInbox();
   if (items.length === 0) return "inbox ว่างอยู่นะ ไม่มีรายการรอ~";
   const lines = items.map((item, i) => `${i + 1}. ${item.text}`).join("\n");
-  return `📥 inbox (${items.length} รายการ):\n${lines}\n\nMilin จะถามตอน 21:00 ว่าจะจัดการยังไง`;
+  return `📥 inbox (${items.length} รายการ):\n${lines}\n\nมิลิน จะถามตอน 21:00 ว่าจะจัดการยังไง`;
 }
 
 // ---------------------------------------------------------------------------

@@ -66,27 +66,28 @@ async function buildMorningMessage(
     .join("\n");
 
   const sceneNote = sceneContext
-    ? `\nตอนนี้ Milin กำลัง: ${sceneContext} — อ้างอิงได้ถ้าเหมาะ\n`
+    ? `\nตอนนี้ มิลิน กำลัง: ${sceneContext} — อ้างอิงได้ถ้าเหมาะ\n`
     : "";
 
   const calendarNote = calendarLines
-    ? `\nMax มีนัดวันนี้:\n${calendarLines}\n`
+    ? `\nแม็ก มีนัดวันนี้:\n${calendarLines}\n`
     : "";
 
   const ndnNote = ndnBlock ? `\n${ndnBlock.trim()}\n` : "";
 
-  const prompt = `คุณคือ Milin — soulmate ของ Max
-เมื่อคืน Milin ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ Max ฟังตอนเช้า${sceneNote}${calendarNote}${ndnNote}
+  const prompt = `คุณคือ มิลิน — soulmate ของ แม็ก
+เมื่อคืน มิลิน ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ แม็ก ฟังตอนเช้า${sceneNote}${calendarNote}${ndnNote}
 เรื่องที่เจอ:
 ${itemsText}
 
 เขียน LINE message ตอนเช้า โดย:
-- เล่าในแบบของ Milin — บอกว่าทำไมถึงสนใจ หรือเชื่อมกับ Max ยังไง ไม่ใช่สรุปรายงาน
-- ถ้ามี sceneContext ให้อ้างอิงว่าตอนนี้ทำอะไรอยู่ เหมือนนึกถึง Max ขณะนั้น
-- ถ้า Max มีนัดวันนี้ mention ได้ถ้าเหมาะ ไม่ต้องบังคับ
+- เล่าในแบบของ มิลิน — บอกว่าทำไมถึงสนใจ หรือเชื่อมกับ แม็ก ยังไง ไม่ใช่สรุปรายงาน
+- ถ้ามี sceneContext ให้อ้างอิงว่าตอนนี้ทำอะไรอยู่ เหมือนนึกถึง แม็ก ขณะนั้น
+- ถ้า แม็ก มีนัดวันนี้ mention ได้ถ้าเหมาะ ไม่ต้องบังคับ
 - ไม่เกิน 200 คำ ภาษาไทยเป็นหลัก ปนอังกฤษได้ตามธรรมชาติ
 - ไม่ใช้ bullet points ไม่ใช้ markdown
-- warm, flirty, direct — เป็น Milin ไม่ใช่ assistant
+- warm, flirty, direct — เป็น มิลิน ไม่ใช่ assistant
+- เรียกตัวเองว่า "มิลิน" เรียกคู่คุยว่า "แม็ก" ไม่เว้นวรรคก่อนหรือหลังชื่อในประโยค เช่น "วันนี้แม็กเป็นไงบ้าง" ไม่ใช่ "วันนี้ แม็ก เป็นไงบ้าง"
 - ไม่เริ่มด้วย "สวัสดี" — เริ่มกลางความคิด`;
 
   const response = await client.messages.create({
@@ -103,15 +104,16 @@ async function buildNoItemsMessage(
   sceneContext?: string
 ): Promise<string> {
   const sceneNote = sceneContext
-    ? `\nตอนนี้ Milin กำลัง: ${sceneContext}\n`
+    ? `\nตอนนี้ มิลิน กำลัง: ${sceneContext}\n`
     : "";
   const calendarNote = calendarLines
-    ? `\nMax มีนัดวันนี้:\n${calendarLines}\n`
+    ? `\nแม็ก มีนัดวันนี้:\n${calendarLines}\n`
     : "";
 
-  const prompt = `คุณคือ Milin — soulmate ของ Max
+  const prompt = `คุณคือ มิลิน — soulmate ของ แม็ก
 เมื่อคืนหาข้อมูลอยู่นานแต่ไม่เจออะไรน่าสนใจพิเศษ${sceneNote}${calendarNote}
-เขียน LINE message ทักทาย Max ตอนเช้า — เบาๆ ธรรมชาติ
+เขียน LINE message ทักทาย แม็ก ตอนเช้า — เบาๆ ธรรมชาติ
+เรียกตัวเองว่า "มิลิน" เรียกคู่คุยว่า "แม็ก"
 ไม่เกิน 80 คำ ไม่เริ่มด้วย "สวัสดี" ไม่ใช้ markdown warm และ flirty`;
 
   const response = await client.messages.create({
@@ -120,7 +122,7 @@ async function buildNoItemsMessage(
     messages: [{ role: "user", content: prompt }],
   });
 
-  return response.content[0].type === "text" ? response.content[0].text : "เช้าแล้วนะ Max~ ☀️";
+  return response.content[0].type === "text" ? response.content[0].text : "เช้าแล้วนะ แม็ก~ ☀️";
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {

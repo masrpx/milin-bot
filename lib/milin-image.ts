@@ -28,7 +28,7 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
   return { contentType: "image/png", ext: "png" };
 }
 
-type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
+export type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
 // Base prompt template — [SCENE], [OUTFIT], [MOOD] are replaced at runtime.
 // Separating the three factors lets us randomize them independently, giving
@@ -145,7 +145,7 @@ function rand<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function pickScene(bangkokHour: number): SceneSlot {
+export function pickScene(bangkokHour: number): SceneSlot {
   const pool =
     bangkokHour >= 20 || bangkokHour < 6 ? NIGHT_POOL :
     bangkokHour < 12                      ? MORNING_POOL :
@@ -164,10 +164,11 @@ function pickScene(bangkokHour: number): SceneSlot {
 }
 
 export async function generateMilinImage(
-  memory: MilinMemory
+  memory: MilinMemory,
+  prePickedScene?: SceneSlot
 ): Promise<{ imageUrl: string; sceneContext: string; outfit: string }> {
   const bangkokHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
-  const { prompt, sceneContext, outfit } = pickScene(bangkokHour);
+  const { prompt, sceneContext, outfit } = prePickedScene ?? pickScene(bangkokHour);
 
   // Read reference image from filesystem — no URL, no expiry
   const baseBuffer = fs.readFileSync(REFERENCE_IMAGE_PATH);

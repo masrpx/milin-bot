@@ -19,7 +19,7 @@ const BASE_MEMORY: MilinMemory = {
 describe("buildMilinSystemPrompt", () => {
   it("contains Milin identity header", () => {
     const prompt = buildMilinSystemPrompt(BASE_MEMORY);
-    expect(prompt).toContain("คุณคือ Milin");
+    expect(prompt).toContain("คุณคือ มิลิน");
   });
 
   it("contains conversation rules section", () => {

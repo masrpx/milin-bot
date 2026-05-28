@@ -62,7 +62,7 @@ async function scoreAndCreateNote(
   interests: string[]
 ): Promise<KnowledgeItem | null> {
   // Step 1: quick relevance score on snippet (cheap)
-  const quickPrompt = `Score relevance 1-10 for Max's interests: ${interests.slice(0, 7).join(", ")}
+  const quickPrompt = `Score relevance 1-10 for แม็ก's interests: ${interests.slice(0, 7).join(", ")}
 Title: ${title}
 Snippet: ${snippet.slice(0, 400)}
 Return JSON only: {"score": 7}
@@ -82,16 +82,16 @@ If clearly irrelevant return: {"score": 0}`;
   const content = fullText.length > 300 ? fullText : snippet;
 
   // Step 3: summarize from full content
-  const prompt = `Summarize this article as an atomic note for Max's Obsidian vault.
+  const prompt = `Summarize this article as an atomic note for แม็ก's Obsidian vault.
 
-Max's interests: ${interests.join(", ")}
+แม็ก's interests: ${interests.join(", ")}
 
 Vault structure (PARA method):
 - 01 Projects
 - 02 Areas
 - 03 Resources/Biohacking, 03 Resources/Finance, 03 Resources/AI, 03 Resources/Psychology, 03 Resources/Business, 03 Resources/Dhamma, 03 Resources/Gaming
 - 04 Archives
-- 05 Milin (bot only, never use this)
+- 05 มิลิน (bot only, never use this)
 
 Title: ${title}
 Content: ${content.slice(0, 5000)}
