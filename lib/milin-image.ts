@@ -64,7 +64,7 @@ const MORNING_POOL: TimePool = {
   outfits: [
     "oversized white shirt",
     "fitted crop top with loose shorts",
-    "soft tank top and pajama shorts",
+    "cozy oversized T-shirt and shorts",
     "sporty yoga set",
     "casual summer dress",
     "lightweight cardigan over camisole",
@@ -106,7 +106,7 @@ const AFTERNOON_POOL: TimePool = {
     "carefree energy",
     "relaxed and confident",
     "thoughtful but soft",
-    "subtly flirty",
+    "light teasing smile",
     "naturally candid",
   ],
 };
@@ -122,9 +122,9 @@ const NIGHT_POOL: TimePool = {
     { en: "quiet balcony at night",            th: "นั่งอยู่บนระเบียงตอนกลางคืน" },
   ],
   outfits: [
-    "satin slip dress",
+    "satin wrap dress",
     "black fitted blazer outfit",
-    "elegant backless dress",
+    "elegant midi dress",
     "silk camisole with cardigan",
     "fitted long-sleeve dress",
     "stylish off-shoulder top",
@@ -132,9 +132,9 @@ const NIGHT_POOL: TimePool = {
   ],
   moods: [
     "quiet confidence",
-    "soft seductive smile",
+    "gentle smile",
     "calm and elegant",
-    "intimate eye contact",
+    "confident gaze",
     "relaxed evening mood",
     "mysterious expression",
     "gentle playful look",
