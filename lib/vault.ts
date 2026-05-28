@@ -8,10 +8,10 @@ const OWNER = process.env.GITHUB_OWNER!;
 const REPO = process.env.GITHUB_REPO!;
 
 export interface PendingAction {
-  type: "delete" | "update" | "create";
-  eventId?: string;      // delete/update only — not yet known for create
+  type: "delete" | "update" | "create" | "reschedule" | "nvdn_paginate" | "todo_classify";
+  eventId?: string;      // delete/update/reschedule
   eventTitle: string;
-  startISO?: string;     // create only — event to be created
+  startISO?: string;     // create only
   endISO?: string;       // create only
   description?: string;  // create only
   changes?: {
@@ -21,7 +21,12 @@ export interface PendingAction {
     description?: string;
     colorId?: number;
   };
-  expiresAt: string; // ISO — expires after 5 minutes
+  // nvdn_paginate only
+  keyword?: string;
+  page?: number;
+  // todo_classify only — ordered inbox item IDs from the ping snapshot
+  inboxSnapshot?: string[];
+  expiresAt: string; // ISO
 }
 
 export interface RecentMessage {

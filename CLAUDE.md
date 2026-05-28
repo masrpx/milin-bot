@@ -16,8 +16,9 @@ Cron jobs (all UTC → ICT):
 | `/api/cron/research` | `0 18 * * *` | 01:00 | RSS → score → summarize → vault queue |
 | `/api/cron/morning` | `0 0 * * *` | 07:00 | Tell Max research; auto-save notes; 50% image |
 | `/api/cron/organize` | `30 18 */2 * *` | 01:30 | Auto-organize 00 Inbox → PARA |
-| `/api/cron/milin-ping` | `0 6 * * *` | 13:00 | Milin-initiated msg (60% + image) |
-| `/api/cron/milin-ping-evening` | `0 12 * * *` | 19:00 | Same as ping |
+| `/api/cron/milin-ping` | `0 5 * * *` | 12:00 | Milin-initiated msg (60% + image) |
+| `/api/cron/milin-ping-evening` | `0 10 * * *` | 17:00 | Same as ping |
+| `/api/cron/todo-ping` | `0 14 * * *` | 21:00 | Send inbox list → ask Max to classify |
 
 ---
 
@@ -35,6 +36,7 @@ app/api/cron/
 lib/
   router.ts          ← classifyMessage (Haiku) + routeMessage (priority 1–7)
   vault.ts           ← GitHub vault I/O; MilinMemory R/W; parseMilinMemory (exported)
+  todo.ts            ← NDN/NVDN CRUD; expireStaleNDN(); NDN_CAP=10
   line.ts            ← reply/push/image + verifyLineSignature
   milin-prompt.ts    ← buildMilinSystemPrompt + buildMemoryExtractPrompt
   milin-image.ts     ← SCENE_POOL (14 scenes) → gpt-image-2 edit → imageUrl + sceneContext
@@ -48,12 +50,21 @@ lib/
     capture.ts       ← "จด:" → 00 Inbox
     conversation.ts  ← chat; recentMessages history; vault search; prompt caching
     photo-request.ts ← generateMilinImage → reply image + text
+    todo-capture.ts  ← "cap:" → add to inbox (no cap at capture)
+    todo-classify.ts ← parse Max's classification reply (Haiku) + handleInboxQuery
+    ndn.ts           ← NDN list/delete/move-to-nvdn/schedule/reschedule
+    nvdn.ts          ← NVDN query + "more" pagination
 
-__tests__/           ← Vitest: line, vault, milin-prompt, router (46 tests)
+__tests__/           ← Vitest: line, vault, milin-prompt, router, todo (61 tests)
 milin-image-1.png    ← reference photo for gpt-image-2 (PNG/WebP, SFW)
 ```
 
 Vault (`masrpx/obsidian-vault`): `00 Inbox/` · `03 Resources/` (always 03, never 04) · `05 Milin/` (bot-owned, never search)
+
+Todo storage (bot-owned, `05 Milin/`):
+- `todo-inbox.json` — raw captures; always accepts (no cap); cleared as items are classified
+- `todo-ndn.json` — NDN list (max 10); auto-expires items > 7 days → NVDN each morning
+- `todo-nvdn.json` — NVDN archive (unbounded); searchable by keyword
 
 ---
 
@@ -63,8 +74,15 @@ Vault (`masrpx/obsidian-vault`): `00 Inbox/` · `03 Resources/` (always 03, neve
 |---|---|---|
 | 1 | `isApproveCommand()` | `handleApprove` — "ok 1,2", "ok ทั้งหมด", "skip" |
 | 2 | `hasPendingColorReply()` | `handleColorReply` — Thai color for pending create |
-| 3 | `isPendingCalendarConfirm()` | `handleCalendarConfirm` — "ยืนยัน" + valid pending |
+| 2.1 | `isPendingNVDNMore()` — text="more" + nvdn_paginate pending | `handleNVDN` — next page |
+| 2.2 | `isPendingRescheduleConfirm()` — "ยืนยัน" + reschedule pending | `confirmReschedule` |
+| 3 | `isPendingCalendarConfirm()` | `handleCalendarConfirm` — "ยืนยัน" + delete/update pending |
+| 3.1 | Starts with `cap:` | `handleTodoCapture` → inbox (before long-text check) |
+| 3.2 | Starts with `(milin )?nvdn` | `handleNVDN` — query / delete / more |
+| 3.3 | Starts with `ndn` or `reschedule ` | `handleNDN` — list/delete/move/schedule |
 | 4 | Starts with `จด:` | `handleCapture` → 00 Inbox |
+| 4.5 | Contains `inbox` | `handleInboxQuery` — list current inbox |
+| 4.6 | `isPendingTodoClassify()` | `handleTodoClassify` — Haiku parses "1 ndn, 2 cal..." |
 | 5 | URL or text > 500 chars | `handleArticle` |
 | 6 | Haiku → "calendar" / "photo_request" | `handleCalendar` / `handlePhotoRequest` |
 | 7 | Everything else | `handleConversation` |
@@ -87,7 +105,7 @@ Vault (`masrpx/obsidian-vault`): `00 Inbox/` · `03 Resources/` (always 03, neve
 | `milinActivity` | — | Latest proactive message (from ping crons) |
 | `pendingAction` | — | Multi-turn calendar flow; expires 5 min |
 
-`pendingAction.type`: `"delete"` / `"update"` → resolved by "ยืนยัน" · `"create"` → resolved by Thai color reply
+`pendingAction.type`: `"delete"` / `"update"` → resolved by "ยืนยัน" · `"create"` → resolved by Thai color reply · `"reschedule"` → resolved by "ยืนยัน" (deletes calendar event + adds to NDN) · `"nvdn_paginate"` → resolved by "more" (10 min TTL) · `"todo_classify"` → resolved by Max's reply to 21:00 ping (24h TTL, stores `inboxSnapshot` IDs)
 
 Updated async (Haiku) after every conversation — fire-and-forget, errors swallowed.
 
@@ -133,7 +151,7 @@ BLOB_READ_WRITE_TOKEN
 ```bash
 npm run dev          # local :3000
 npm run build        # must pass before deploy
-npm test             # Vitest — 46 tests (line, vault, prompt, router)
+npm test             # Vitest — 63 tests (line, vault, prompt, router, todo)
 vercel --prod        # deploy (GitHub auto-deploy broken)
 ```
 
@@ -160,6 +178,10 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 11. **Image safety** — `gpt-image-2` rejects sexual content; SCENE_POOL only, never free-form. If scene triggers: find by `sceneContext`, fix in `lib/milin-image.ts`
 12. **recentMessages race** — `updateMemoryAsync` is concurrent R/W; rare clobber, accepted
 13. **handleApprove vestigial** — still routes "ok ทั้งหมด" but returns "ไม่มี notes ที่รอ approve"
+14. **`cap:` before long-text check** — priority 3.1 ensures a long `cap:` message doesn't fall into `handleArticle`
+15. **NDN cap 10** — cap enforced at classification time (not capture); `todo-inbox.json` / `todo-ndn.json` / `todo-nvdn.json` live in `05 Milin/`
+16. **NDN 7-day expire** — `expireStaleNDN()` runs each morning cron; expired items move to NVDN silently + note in morning message
+17. **`ndn N [time]` creates calendar without color-pick** — uses `createEvent` directly (no colorId) to avoid coupling with the color-reply flow
 
 ---
 

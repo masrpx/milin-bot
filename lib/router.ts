@@ -12,6 +12,18 @@ import {
   isPendingCalendarConfirm,
 } from "./handlers/calendar";
 import { handlePhotoRequest } from "./handlers/photo-request";
+import { handleTodoCapture } from "./handlers/todo-capture";
+import {
+  handleNDN,
+  isPendingRescheduleConfirm,
+  confirmReschedule,
+} from "./handlers/ndn";
+import { handleNVDN, isPendingNVDNMore } from "./handlers/nvdn";
+import {
+  handleTodoClassify,
+  handleInboxQuery,
+  isPendingTodoClassify,
+} from "./handlers/todo-classify";
 
 const anthropic = new Anthropic();
 
@@ -73,6 +85,11 @@ export async function routeMessage(
   const isUrl = /https?:\/\/[^\s]+/.test(text);
   const isLongText = text.length > 500;
   const isCapture = /^จด:/i.test(text.trim());
+  const isTodoCapture = /^cap:/i.test(text.trim());
+  const isNDN = /^ndn(\s|$)/i.test(text.trim());
+  const isReschedule = /^reschedule\s/i.test(text.trim());
+  const isNVDN = /^(milin\s+)?nvdn(\s|$)/i.test(text.trim());
+  const isInboxQuery = /\binbox\b/i.test(text);
 
   // Priority 1: approve commands — "ok 1,2", "skip", "ok ทั้งหมด" (keyword, instant)
   if (isApproveCommand(text)) return handleApprove(text);
@@ -83,6 +100,15 @@ export async function routeMessage(
   if (hasPendingColorReply(memory)) {
     const reply = await handleColorReply(text, memory);
     // Empty return means the pending expired mid-check — fall through normally
+    if (reply) return reply;
+  }
+
+  // Priority 2.1: "more" for NVDN pagination — before classifier so it doesn't route to chat
+  if (isPendingNVDNMore(text, memory)) return handleNVDN(text, memory);
+
+  // Priority 2.2: "ยืนยัน" confirming a reschedule (delete calendar → add to NDN)
+  if (isPendingRescheduleConfirm(text, memory)) {
+    const reply = await confirmReschedule(memory);
     if (reply) return reply;
   }
 
@@ -101,9 +127,26 @@ export async function routeMessage(
     updateMilinMemory({ pendingAction: undefined }).catch(() => {});
   }
 
+  // Priority 3.1: cap: prefix — must be before long-text check so a long cap: note
+  // doesn't fall into the article handler
+  if (isTodoCapture) return handleTodoCapture(text.replace(/^cap:\s*/i, "").trim());
+
+  // Priority 3.2: NVDN query / delete
+  if (isNVDN) return handleNVDN(text, memory);
+
+  // Priority 3.3: NDN commands + reschedule
+  if (isNDN || isReschedule) return handleNDN(text, memory);
+
   // Priority 4: explicit capture prefix — must be before long-text check so
   // long "จด:" notes don't fall into the article handler
   if (isCapture) return handleCapture(text.replace(/^จด:\s*/i, "").trim());
+
+  // Priority 4.5: inbox query ("ขอดู inbox") — before long-text and Haiku
+  if (isInboxQuery) return handleInboxQuery();
+
+  // Priority 4.6: pending todo classification reply — catches "1 ndn, 2 cal พฤหัส 14.00" etc.
+  // Placed after specific commands so ndn/nvdn/cap: still work while classify is pending.
+  if (isPendingTodoClassify(memory)) return handleTodoClassify(text, memory);
 
   // Priority 5: URL or long text → article handler (no LLM needed to detect)
   if (isUrl || isLongText) return handleArticle(text, isUrl);

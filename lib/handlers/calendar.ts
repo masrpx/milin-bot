@@ -105,7 +105,7 @@ type CalendarRequest = {
   colorId?: number | null; // null = ask user; undefined = not applicable
 };
 
-async function parseCalendarRequest(text: string): Promise<CalendarRequest> {
+export async function parseCalendarRequest(text: string): Promise<CalendarRequest> {
   const nowUTC = new Date();
   const ictOffset = 7 * 60 * 60 * 1000;
   const ictNow = new Date(nowUTC.getTime() + ictOffset);
@@ -171,7 +171,7 @@ For all other intents: colorId must be null.`,
 // ---------------------------------------------------------------------------
 
 /** Format ISO datetime to HH:MM in ICT (UTC+7). */
-function formatTime(iso: string): string {
+export function formatTime(iso: string): string {
   try {
     const ictMs = new Date(iso).getTime() + 7 * 60 * 60 * 1000;
     const d = new Date(ictMs);
@@ -184,7 +184,7 @@ function formatTime(iso: string): string {
 }
 
 /** Format ISO date to a readable Thai-ish label (e.g. "วันศุกร์ 30 พ.ค."). */
-function formatDateLabel(iso: string): string {
+export function formatDateLabel(iso: string): string {
   try {
     const ictMs = new Date(iso).getTime() + 7 * 60 * 60 * 1000;
     const d = new Date(ictMs);

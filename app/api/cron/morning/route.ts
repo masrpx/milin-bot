@@ -11,6 +11,7 @@ import {
 } from "@/lib/vault";
 import { getEvents } from "@/lib/calendar";
 import { generateMilinImage } from "@/lib/milin-image";
+import { getNDN, expireStaleNDN } from "@/lib/todo";
 
 export const maxDuration = 120;
 
@@ -40,9 +41,22 @@ function formatEventTime(iso: string): string {
   }
 }
 
+function buildNDNBlock(ndnTexts: string[], expiredTitles: string[]): string {
+  let block = "";
+  if (expiredTitles.length > 0) {
+    block += `\n⚠️ ย้าย NDN → NVDN อัตโนมัติ: ${expiredTitles.join(", ")}`;
+  }
+  if (ndnTexts.length > 0) {
+    const lines = ndnTexts.map((t, i) => `${i + 1}. ${t}`).join("\n");
+    block += `\n📋 NDN ค้างอยู่ (${ndnTexts.length} รายการ):\n${lines}`;
+  }
+  return block;
+}
+
 async function buildMorningMessage(
   items: KnowledgeItem[],
   calendarLines: string,
+  ndnBlock: string,
   sceneContext?: string
 ): Promise<string> {
   // Pick the 3 most relevant to talk about — don't list all 10
@@ -59,8 +73,10 @@ async function buildMorningMessage(
     ? `\nMax มีนัดวันนี้:\n${calendarLines}\n`
     : "";
 
+  const ndnNote = ndnBlock ? `\n${ndnBlock.trim()}\n` : "";
+
   const prompt = `คุณคือ Milin — soulmate ของ Max
-เมื่อคืน Milin ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ Max ฟังตอนเช้า${sceneNote}${calendarNote}
+เมื่อคืน Milin ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ Max ฟังตอนเช้า${sceneNote}${calendarNote}${ndnNote}
 เรื่องที่เจอ:
 ${itemsText}
 
@@ -149,6 +165,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       items = await getKnowledgeQueue(queueDate);
     }
 
+    // --- NDN: auto-expire stale items + load current list (run in parallel) ---
+    const [expiredTitles, { items: ndnItems }] = await Promise.all([
+      expireStaleNDN().catch(() => [] as string[]),
+      getNDN().catch(() => ({ items: [] as import("@/lib/todo").NDNItem[], sha: undefined })),
+    ]);
+    const ndnBlock = buildNDNBlock(ndnItems.map((i) => i.text), expiredTitles);
+
     // Wait for image before building message (sceneContext affects the text)
     await imagePromise;
 
@@ -162,7 +185,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         console.error("Morning: failed to save knowledge notes:", err)
       );
 
-      message = await buildMorningMessage(items, calendarLines, sceneContext);
+      message = await buildMorningMessage(items, calendarLines, ndnBlock, sceneContext);
+    }
+
+    // Append NDN block to message when knowledge items exist (buildMorningMessage includes it)
+    // For the no-items case, append directly to keep Sonnet prompt short
+    if (items.length === 0 && ndnBlock) {
+      message += `\n\n${ndnBlock.trim()}`;
     }
 
     if (imageUrl) await pushImageMessage(imageUrl);
