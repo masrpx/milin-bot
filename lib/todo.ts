@@ -46,14 +46,25 @@ async function readJsonFile<T>(path: string): Promise<{ items: T[]; sha?: string
 
 async function writeJsonFile<T>(path: string, items: T[], sha?: string): Promise<void> {
   const content = Buffer.from(JSON.stringify(items, null, 2), "utf-8").toString("base64");
-  await octokit.repos.createOrUpdateFileContents({
-    owner: OWNER,
-    repo: REPO,
-    path,
-    message: `milin: update ${path.split("/").pop()}`,
-    content,
-    ...(sha ? { sha } : {}),
-  });
+  const write = (currentSha?: string) =>
+    octokit.repos.createOrUpdateFileContents({
+      owner: OWNER,
+      repo: REPO,
+      path,
+      message: `milin: update ${path.split("/").pop()}`,
+      content,
+      ...(currentSha ? { sha: currentSha } : {}),
+    });
+  try {
+    await write(sha);
+  } catch (err: unknown) {
+    if ((err as { status?: number }).status === 409) {
+      const fresh = await readJsonFile<T>(path);
+      await write(fresh.sha);
+    } else {
+      throw err;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
