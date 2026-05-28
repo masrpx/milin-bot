@@ -455,6 +455,25 @@ export async function appendRecentMessages(
   });
 }
 
+export async function appendChatHistory(
+  userText: string,
+  botReply: string
+): Promise<void> {
+  // Use ICT (UTC+7) for date and time
+  const now = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const date = now.toISOString().split("T")[0];
+  const time = now.toISOString().split("T")[1].slice(0, 5);
+
+  const filePath = `05 Milin/history/${date}.md`;
+  const existing = await getFile(filePath);
+
+  const header = existing ? "" : `# Chat History — ${date}\n\n`;
+  const entry = `### ${time}\n**Max:** ${userText}\n**Milin:** ${botReply}\n\n`;
+
+  const newContent = (existing?.content ?? "") + header + entry;
+  await upsertFile(filePath, newContent, `chat: ${date} ${time}`, existing?.sha);
+}
+
 export async function saveToKnowledgeQueue(
   date: string,
   items: KnowledgeItem[]

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { updateMilinMemory, appendRecentMessages, type MilinMemory } from "./vault";
+import { updateMilinMemory, appendRecentMessages, appendChatHistory, type MilinMemory } from "./vault";
 import { handleCapture } from "./handlers/capture";
 import { handleArticle } from "./handlers/article";
 import { handleConversation } from "./handlers/conversation";
@@ -95,7 +95,10 @@ export async function routeMessage(
   // here (fire-and-forget) so memory is complete regardless of which handler ran.
   // conversation.ts does NOT save recentMessages itself — this is the single place.
   async function finish(reply: string): Promise<string> {
-    if (reply) appendRecentMessages(text, reply).catch(() => {});
+    if (reply) {
+      appendRecentMessages(text, reply).catch(() => {});
+      appendChatHistory(text, reply).catch(() => {});
+    }
     return reply;
   }
 
@@ -168,6 +171,7 @@ export async function routeMessage(
   // returns "" so the caller knows not to send another reply.
   if (category === "photo_request") {
     await handlePhotoRequest(replyToken, memory);
+    appendChatHistory(text, "[ส่งรูป]").catch(() => {});
     return "";
   }
 
