@@ -95,14 +95,22 @@ export function isCalendarMessage(text: string): boolean {
 // Haiku: parse Thai natural language → structured CalendarRequest
 // ---------------------------------------------------------------------------
 
+type BulkEvent = {
+  title: string;
+  startISO: string;
+  endISO: string;
+  colorId?: number | null;
+};
+
 type CalendarRequest = {
-  intent: "read" | "free_check" | "create" | "update" | "delete" | "suggest" | "unknown";
+  intent: "read" | "free_check" | "create" | "update" | "delete" | "suggest" | "bulk_create" | "unknown";
   title?: string;
   startISO?: string;
   endISO?: string;
   durationMin?: number;
   targetKeyword?: string;
   colorId?: number | null; // null = ask user; undefined = not applicable
+  events?: BulkEvent[];   // bulk_create only
 };
 
 export async function parseCalendarRequest(text: string): Promise<CalendarRequest> {
@@ -117,7 +125,7 @@ export async function parseCalendarRequest(text: string): Promise<CalendarReques
   try {
     const res = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 350,
+      max_tokens: 1500,
       messages: [
         {
           role: "user",
@@ -125,6 +133,7 @@ export async function parseCalendarRequest(text: string): Promise<CalendarReques
 Parse this Thai calendar request and return JSON only:
 "${text}"
 
+Single-event format:
 {
   "intent": "read|free_check|create|update|delete|suggest",
   "title": "event title (create/update only, else null)",
@@ -134,6 +143,22 @@ Parse this Thai calendar request and return JSON only:
   "targetKeyword": "keyword to match existing event title (delete/update only, else null)",
   "colorId": null
 }
+
+Bulk-create format (use when message lists MULTIPLE dates/events):
+{
+  "intent": "bulk_create",
+  "events": [
+    {"title": "...", "startISO": "...", "endISO": "...", "colorId": 5},
+    ...
+  ]
+}
+
+Bulk-create rules:
+- Use "bulk_create" when the message contains 2 or more separate date+time entries.
+- Expand comma-separated days sharing the same time: "8,15,มิย. 14.00-15.00" → two separate events on Jun 8 and Jun 15.
+- Each event in the array must have title, startISO, endISO, colorId.
+- If a single colorId applies to all events (stated once in the message), apply it to every event in the array.
+- Do NOT use "bulk_create" for a single event with a single date.
 
 Date/time rules:
 - EXPLICIT DATE TAKES PRIORITY: if the message contains a day number + month name (e.g. "5 มิย", "15 มีนาคม", "3 ก.ค."), use that exact date — do NOT apply the "coming Friday/Saturday" heuristic. A day name like "วันศุกร์" alongside an explicit date is just confirmation, not the date source.
@@ -348,6 +373,44 @@ export async function handleCalendar(
           .map((s) => `• ${formatTime(s.startISO)} – ${formatTime(s.endISO)}`)
           .join("\n");
         return `ดูแล้วมีว่างช่วงนี้ค่ะ:\n${slotLines}`;
+      }
+
+      case "bulk_create": {
+        const events = req.events;
+        if (!events || events.length === 0) {
+          return "ไม่เข้าใจว่าอยากสร้างนัดไหนบ้าง ลองบอกใหม่ได้มั้ยนะ~";
+        }
+
+        const results = await Promise.allSettled(
+          events.map((ev) =>
+            createEvent(ev.title, ev.startISO, ev.endISO, undefined, ev.colorId ?? undefined)
+          )
+        );
+
+        const succeeded: BulkEvent[] = [];
+        const failedCount = results.filter((r, i) => {
+          if (r.status === "rejected") {
+            console.error(`bulk_create failed for event ${i}:`, r.reason);
+            return true;
+          }
+          succeeded.push(events[i]);
+          return false;
+        }).length;
+
+        if (succeeded.length === 0) {
+          return "สร้างนัดไม่สำเร็จเลยนะ ลองใหม่อีกทีได้มั้ย~";
+        }
+
+        const lines = succeeded
+          .map((ev) => `• ${formatDateLabel(ev.startISO)} ${formatTime(ev.startISO)}–${formatTime(ev.endISO)}`)
+          .join("\n");
+
+        const title = succeeded[0].title;
+        const summary =
+          failedCount > 0
+            ? `สร้าง '${title}' ได้ ${succeeded.length} นัด (ล้มเหลว ${failedCount} นัด) 📅\n${lines}`
+            : `โอเคนะ สร้าง '${title}' ทั้งหมด ${succeeded.length} นัดแล้วค่ะ 📅\n${lines}`;
+        return summary;
       }
 
       default:

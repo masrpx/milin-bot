@@ -66,7 +66,7 @@ describe("handleTodoCapture", () => {
   it("adds a new item to inbox when inbox is empty", async () => {
     mockGetContent.mockRejectedValue(new Error("Not Found")); // file doesn't exist yet
     const reply = await handleTodoCapture("buy protein");
-    expect(reply).toContain("จดไว้แล้ว ✓");
+    expect(reply).toBe("จดไว้แล้ว ✓");
     expect(mockUpsertContent).toHaveBeenCalledOnce();
     const written = JSON.parse(
       Buffer.from(mockUpsertContent.mock.calls[0][0].content, "base64").toString("utf-8")
