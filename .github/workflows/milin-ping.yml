@@ -11,5 +11,5 @@ jobs:
     steps:
       - name: Trigger milin-ping cron
         run: |
-          curl -sf -X POST https://milin-bot.vercel.app/api/cron/milin-ping \
+          curl -sf https://milin-bot.vercel.app/api/cron/milin-ping \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
