@@ -162,9 +162,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const probability = Math.min(1, remainingPings / remainingSlots);
-  if (Math.random() > probability) {
-    return NextResponse.json({ ok: true, sent: false });
-  }
+  void probability;
 
   const type = pickMessageType();
   const pickedScene = pickScene(hour);
