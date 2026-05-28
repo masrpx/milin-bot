@@ -6,6 +6,7 @@ import {
   getMilinMemory,
   getDateOffset,
   saveAllKnowledgeNotes,
+  updateMilinMemory,
   type KnowledgeItem,
 } from "@/lib/vault";
 import { getEvents } from "@/lib/calendar";
@@ -118,10 +119,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const memory = await getMilinMemory();
     let imageUrl: string | null = null;
     let sceneContext: string | undefined;
+    let imageOutfit: string | undefined;
 
     const imagePromise = Math.random() < 0.5
       ? generateMilinImage(memory)
-          .then((r) => { imageUrl = r.imageUrl; sceneContext = r.sceneContext; })
+          .then((r) => { imageUrl = r.imageUrl; sceneContext = r.sceneContext; imageOutfit = r.outfit; })
           .catch(() => {})
       : Promise.resolve();
 
@@ -165,6 +167,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (imageUrl) await pushImageMessage(imageUrl);
     await pushMessage(message);
+
+    const activityEntry = imageUrl && imageOutfit
+      ? `${message}\n[ส่งรูปไปด้วย — ใส่ ${imageOutfit}]`
+      : message;
+    updateMilinMemory({ milinActivity: activityEntry }).catch(() => {});
 
     return NextResponse.json({
       ok: true,

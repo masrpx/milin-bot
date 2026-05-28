@@ -37,7 +37,7 @@ const BASE_PROMPT = `Create a realistic casual selfie or candid photo of the spe
 
 The image should feel natural, spontaneous, and slightly imperfect, like a real everyday moment captured quickly with a phone camera. Keep the person clearly recognizable, but avoid making the image look like a professional photoshoot, influencer post, or AI-generated beauty portrait.
 
-Use realistic skin texture, natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles. The outfit should be quite revealing.
+Use realistic skin texture, natural facial details, slightly messy hair, relaxed posture, authentic body language, and imperfect framing. Include subtle imperfections such as slight motion blur, mild grain, uneven lighting, soft focus in some areas, or casual awkward camera angles.
 
 Sometimes show the person actively taking the selfie — arm extended toward the camera, phone partially visible in the corner of the frame, front-camera angle slightly above eye level, as if caught mid-snap.
 
@@ -175,7 +175,7 @@ export async function generateMilinImage(
 
   if (!contentType.includes("png") && !contentType.includes("webp")) {
     throw new Error(
-      `gpt-image-1 requires PNG or WebP. milin-image-1 detected as ${contentType}. Convert it to PNG and recommit.`
+      `gpt-image-2 requires PNG or WebP. milin-image-1 detected as ${contentType}. Convert it to PNG and recommit.`
     );
   }
 
@@ -188,9 +188,9 @@ export async function generateMilinImage(
     size: "1024x1024",
   });
 
-  // gpt-image-1 returns b64_json; handle URL fallback just in case
+  // gpt-image-2 returns b64_json; handle URL fallback just in case
   const item = (result.data ?? [])[0] as { b64_json?: string; url?: string } | undefined;
-  if (!item) throw new Error("gpt-image-1 returned empty data array");
+  if (!item) throw new Error("gpt-image-2 returned empty data array");
   let imageBuffer: Buffer;
 
   if (item.b64_json) {
@@ -199,7 +199,7 @@ export async function generateMilinImage(
     const imgRes = await fetch(item.url);
     imageBuffer = Buffer.from(await imgRes.arrayBuffer());
   } else {
-    throw new Error("gpt-image-1 returned no image data");
+    throw new Error("gpt-image-2 returned no image data");
   }
 
   const blob = await put(`milin-generated/${Date.now()}.jpg`, imageBuffer, {
