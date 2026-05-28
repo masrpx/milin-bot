@@ -14,11 +14,10 @@ Cron jobs (all UTC → ICT):
 | Endpoint | UTC | ICT | Purpose |
 |---|---|---|---|
 | `/api/cron/research` | `0 18 * * *` | 01:00 | RSS → score → summarize → vault queue |
-| `/api/cron/morning` | `0 0 * * *` | 07:00 | Tell Max research; auto-save notes; 50% image |
+| `/api/cron/morning` | `0 0 * * *` | 07:00 | Tell แม็ก research; auto-save notes; 50% image |
 | `/api/cron/organize` | `30 18 */2 * *` | 01:30 | Auto-organize 00 Inbox → PARA |
-| `/api/cron/milin-ping` | `0 5 * * *` | 12:00 | Milin-initiated msg (60% + image) |
-| `/api/cron/milin-ping-evening` | `0 10 * * *` | 17:00 | Same as ping |
-| `/api/cron/todo-ping` | `0 14 * * *` | 21:00 | Send inbox list → ask Max to classify |
+| `/api/cron/milin-ping` | `0 1-18 * * *` | 08:00–01:00 | Hourly lottery; adaptive prob; max 2/day |
+| `/api/cron/todo-ping` | `0 14 * * *` | 21:00 | Send inbox list → ask แม็ก to classify |
 
 ---
 
@@ -30,8 +29,7 @@ app/api/cron/
   research/route.ts            ← runNightlyResearch() → knowledge-queue
   morning/route.ts             ← auto-saves all notes; Sonnet message; maxDuration=120
   organize/route.ts            ← 00 Inbox → PARA folders
-  milin-ping/route.ts          ← push msg + image; saves milinActivity
-  milin-ping-evening/route.ts  ← same as milin-ping
+  milin-ping/route.ts          ← adaptive probability; 3 types; calendar+scene+time-of-day context
 
 lib/
   router.ts          ← classifyMessage (Haiku) + routeMessage (priority 1–7)
@@ -39,7 +37,7 @@ lib/
   todo.ts            ← NDN/NVDN CRUD; expireStaleNDN(); NDN_CAP=10
   line.ts            ← reply/push/image + verifyLineSignature
   milin-prompt.ts    ← buildMilinSystemPrompt + buildMemoryExtractPrompt
-  milin-image.ts     ← SCENE_POOL (14 scenes) → gpt-image-2 edit → imageUrl + sceneContext
+  milin-image.ts     ← 3 time-based pools (MORNING/AFTERNOON/NIGHT); exports pickScene + SceneSlot
   research.ts        ← RSS fetch (2/feed cap + shuffle) → Haiku score → Sonnet summarize
   fetch-article.ts   ← article text extractor
   calendar.ts        ← Google Calendar API wrapper (no googleapis)
@@ -51,11 +49,11 @@ lib/
     conversation.ts  ← chat; recentMessages history; vault search; prompt caching
     photo-request.ts ← generateMilinImage → reply image + text
     todo-capture.ts  ← "cap:" → add to inbox (no cap at capture)
-    todo-classify.ts ← parse Max's classification reply (Haiku) + handleInboxQuery
+    todo-classify.ts ← parse แม็ก's classification reply (Haiku) + handleInboxQuery
     ndn.ts           ← NDN list/delete/move-to-nvdn/schedule/reschedule
     nvdn.ts          ← NVDN query + "more" pagination
 
-__tests__/           ← Vitest: line, vault, milin-prompt, router, todo (61 tests)
+__tests__/           ← Vitest: line, vault, milin-prompt, router, todo (67 tests)
 milin-image-1.png    ← reference photo for gpt-image-2 (PNG/WebP, SFW)
 ```
 
@@ -99,15 +97,35 @@ Todo storage (bot-owned, `05 Milin/`):
 | `learnedPreferences` | 30 | Habits, style, likes/dislikes |
 | `topicsAsked` | 20 | Intellectual topics |
 | `importantConversations` | 30 | One summary per conversation |
-| `currentMood` | — | Milin's mood |
+| `currentMood` | — | มิลิน's mood |
 | `relationshipStage` | — | Auto from convo count: <5 / 5–15 / 15–30 / 30+ |
 | `recentMessages` | 10 | Last 5 pairs (JSON block) — rolling context window |
-| `milinActivity` | — | Latest proactive message (from ping crons) |
+| `milinActivity` | — | Latest proactive message (from ping cron) |
 | `pendingAction` | — | Multi-turn calendar flow; expires 5 min |
+| `pingToday` | — | `{ date: string, count: number }` — daily quota tracker (ICT date) |
 
-`pendingAction.type`: `"delete"` / `"update"` → resolved by "ยืนยัน" · `"create"` → resolved by Thai color reply · `"reschedule"` → resolved by "ยืนยัน" (deletes calendar event + adds to NDN) · `"nvdn_paginate"` → resolved by "more" (10 min TTL) · `"todo_classify"` → resolved by Max's reply to 21:00 ping (24h TTL, stores `inboxSnapshot` IDs)
+`pendingAction.type`: `"delete"` / `"update"` → resolved by "ยืนยัน" · `"create"` → resolved by Thai color reply · `"reschedule"` → resolved by "ยืนยัน" (deletes calendar event + adds to NDN) · `"nvdn_paginate"` → resolved by "more" (10 min TTL) · `"todo_classify"` → resolved by แม็ก's reply to 21:00 ping (24h TTL, stores `inboxSnapshot` IDs)
 
 Updated async (Haiku) after every conversation — fire-and-forget, errors swallowed.
+
+---
+
+## Ping Flow (`app/api/cron/milin-ping/route.ts`)
+
+Runs every hour ICT 08:00–01:00 (`0 1-18 * * *` UTC). Max 2 pings/day.
+
+**Decision logic per slot:**
+1. Read `memory.pingToday` — if `count >= 2` skip
+2. Adaptive probability: `min(1, remainingPings / remainingSlots)` — guarantees 2 pings spread randomly
+3. Pick type: 40% emotional / 30% flirty / 30% very_flirty
+4. `pickScene(ictHour)` — always picks scene (MORNING/AFTERNOON/NIGHT pool); passed to image gen for consistency
+5. Fetch today's upcoming calendar events (silent fail)
+6. 60% chance: `generateMilinImage(memory, pickedScene)` — consistent scene/image
+7. Sonnet generates message with: scene context, calendar events, time-of-day tone, last ping (no repeat), last 4 actual messages (recency)
+8. Push image (if any) + text to LINE
+9. Fire-and-forget: update `milinActivity` + `pingToday.count++`
+
+Word caps: emotional ≤120 / flirty 30–150 variable / very_flirty ≤200
 
 ---
 
@@ -120,6 +138,15 @@ Updated async (Haiku) after every conversation — fire-and-forget, errors swall
 5. `updateMemoryAsync()` fire-and-forget (Haiku)
 
 NEEDS_VAULT: `?, ใคร, อะไร, ยังไง, ทำไม, เมื่อไหร่, ที่ไหน, หา, ค้นหา, สรุป, บอก, อธิบาย, แนะนำ, มีไหม, ช่วย, เรื่อง`
+
+---
+
+## Personality Rules (enforced in all prompts)
+
+- Names: **มิลิน** (self) / **แม็ก** (Max) — no space before/after in Thai sentences e.g. "วันนี้แม็กเป็นไงบ้าง" not "วันนี้ แม็ก เป็นไงบ้าง"
+- Questions embedded in thought, not fired as standalone short follow-ups
+- Thai primary, English mix natural; no ครับ/ค่ะ; no markdown
+- Never identifies as AI or bot
 
 ---
 
@@ -151,14 +178,14 @@ BLOB_READ_WRITE_TOKEN
 ```bash
 npm run dev          # local :3000
 npm run build        # must pass before deploy
-npm test             # Vitest — 63 tests (line, vault, prompt, router, todo)
+npm test             # Vitest — 67 tests (line, vault, prompt, router, todo)
 vercel --prod        # deploy (GitHub auto-deploy broken)
 ```
 
 Test crons:
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cron/morning
-curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cron/research
+curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cron/milin-ping
 ```
 
 ---
@@ -170,7 +197,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 3. **`05 Milin/` excluded** from vault search — bot never reads its own memory
 4. **Vault PARA** — always `03 Resources/` (not 04)
 5. **GitHub auto-deploy broken** — always `vercel --prod`
-6. **milin-ping** — 40% intentional skip (`{"ok":true,"sent":false}`)
+6. **milin-ping adaptive probability** — reads `pingToday` from vault every slot (18 GitHub reads/day); if last 2 slots still need pings, probability clamps to 1.0
 7. **Google Calendar access_token** — never cached; refreshed every call via refresh_token
 8. **pendingAction expires 5 min** — "ยืนยัน" after expiry falls through to conversation
 9. **Color routing** — priority 2 runs before Haiku so "แดง" doesn't misroute
@@ -182,6 +209,8 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 15. **NDN cap 10** — cap enforced at classification time (not capture); `todo-inbox.json` / `todo-ndn.json` / `todo-nvdn.json` live in `05 Milin/`
 16. **NDN 7-day expire** — `expireStaleNDN()` runs each morning cron; expired items move to NVDN silently + note in morning message
 17. **`ndn N [time]` creates calendar without color-pick** — uses `createEvent` directly (no colorId) to avoid coupling with the color-reply flow
+18. **`pickScene` exported** — `lib/milin-image.ts` exports `pickScene(bangkokHour)` and `SceneSlot` type; ping route calls it first so text + image share the same scene
+19. **very_flirty type** — Claude may soft-limit explicit content on standard API keys; message will still be intimate/flirty if refused
 
 ---
 
@@ -190,6 +219,6 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 - [ ] **Sentry** — errors only in Vercel logs
 - [ ] **Staging env** — no preview environment
 - [ ] **Remove handleApprove** — vestigial, safe to delete
-- [ ] **SCENE_POOL variety** — 14 scenes will repeat; add seasonal variation
+- [ ] **SCENE_POOL seasonal variety** — pools are static; no seasonal/holiday variation
 - [ ] **Emotion detection** — no mood layer beyond keyword map in updateMemoryAsync
 - [ ] **Provider fallback** — single Anthropic dependency; no fallback if API is down
