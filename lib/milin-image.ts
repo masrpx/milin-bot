@@ -30,9 +30,6 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
 
 export type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
-// Base prompt template — [SCENE], [OUTFIT], [MOOD] are replaced at runtime.
-// Separating the three factors lets us randomize them independently, giving
-// 7³ = 343 unique combinations per time period instead of ~5 fixed scenes.
 const BASE_PROMPT = `Create a realistic casual selfie or candid photo of the specified person in [SCENE], wearing [OUTFIT], with a [MOOD] expression.
 
 The image should feel natural, spontaneous, and slightly imperfect, like a real everyday moment captured quickly with a phone camera. Keep the person clearly recognizable, but avoid making the image look like a professional photoshoot, influencer post, or AI-generated beauty portrait.
@@ -45,30 +42,47 @@ The lighting should feel natural and believable — daylight from windows, outdo
 
 Style: photorealistic, candid photography, natural phone-camera quality, imperfect realism, everyday atmosphere, handheld selfie feel, no beauty filter, no heavy retouching, authentic and believable.`;
 
-type TimePool = {
-  scenes: { en: string; th: string }[];
+type Scene = {
+  en: string;
+  th: string;
   outfits: string[];
+};
+
+type TimePool = {
+  scenes: Scene[];
   moods: string[];
 };
 
 const MORNING_POOL: TimePool = {
   scenes: [
-    { en: "sunlit cafe window seat",             th: "นั่งอยู่ที่คาเฟ่แสงแดดยามเช้า" },
-    { en: "hotel balcony after waking up",        th: "ตื่นนอนมายืนอยู่ที่ระเบียงโรงแรม" },
-    { en: "morning walk in the park",             th: "เดินเล่นอยู่ในสวนยามเช้า" },
-    { en: "kitchen making coffee",                th: "ชงกาแฟอยู่ในครัว" },
-    { en: "beachside breakfast table",            th: "นั่งกินอาหารเช้าริมทะเล" },
-    { en: "casual mirror selfie before going out",th: "เซลฟี่หน้ากระจกก่อนออกไปข้างนอก" },
-    { en: "reading near a bedroom window",        th: "อ่านหนังสืออยู่ริมหน้าต่าง" },
-  ],
-  outfits: [
-    "oversized white shirt",
-    "casual fitted top with loose shorts",
-    "cozy oversized T-shirt and shorts",
-    "sporty yoga set",
-    "casual summer dress",
-    "lightweight cardigan over a simple top",
-    "cozy crew-neck knit sweater",
+    {
+      en: "sunlit cafe window seat", th: "นั่งอยู่ที่คาเฟ่แสงแดดยามเช้า",
+      outfits: ["lightweight cardigan over a simple top", "casual summer dress", "oversized white shirt"],
+    },
+    {
+      en: "hotel balcony after waking up", th: "ตื่นนอนมายืนอยู่ที่ระเบียงโรงแรม",
+      outfits: ["cozy oversized T-shirt and shorts", "cozy crew-neck knit sweater", "lightweight cardigan over a simple top"],
+    },
+    {
+      en: "morning walk in the park", th: "เดินเล่นอยู่ในสวนยามเช้า",
+      outfits: ["sporty yoga set", "casual fitted top with loose shorts", "cozy oversized T-shirt and shorts"],
+    },
+    {
+      en: "kitchen making coffee", th: "ชงกาแฟอยู่ในครัว",
+      outfits: ["oversized white shirt", "cozy oversized T-shirt and shorts", "cozy crew-neck knit sweater"],
+    },
+    {
+      en: "beachside breakfast table", th: "นั่งกินอาหารเช้าริมทะเล",
+      outfits: ["casual summer dress", "casual fitted top with loose shorts", "lightweight cardigan over a simple top"],
+    },
+    {
+      en: "casual mirror selfie before going out", th: "เซลฟี่หน้ากระจกก่อนออกไปข้างนอก",
+      outfits: ["casual summer dress", "lightweight cardigan over a simple top", "casual fitted top with loose shorts"],
+    },
+    {
+      en: "reading near a bedroom window", th: "อ่านหนังสืออยู่ริมหน้าต่าง",
+      outfits: ["cozy crew-neck knit sweater", "oversized white shirt", "cozy oversized T-shirt and shorts"],
+    },
   ],
   moods: [
     "sleepy soft smile",
@@ -83,22 +97,34 @@ const MORNING_POOL: TimePool = {
 
 const AFTERNOON_POOL: TimePool = {
   scenes: [
-    { en: "outdoor brunch cafe",                          th: "นั่งบรันช์คาเฟ่กลางแจ้ง" },
-    { en: "shopping mall mirror selfie",                  th: "เซลฟี่หน้ากระจกในห้าง" },
-    { en: "rooftop terrace cafe",                          th: "นั่งเล่นอยู่บนดาดฟ้า" },
-    { en: "bookstore cafe corner",                        th: "นั่งอยู่ในร้านหนังสือ" },
-    { en: "city street walk",                             th: "เดินเล่นอยู่กลางเมือง" },
-    { en: "gym break selfie",                             th: "หยุดพักระหว่างออกกำลังกาย" },
-    { en: "sitting in a parked car during golden hour",   th: "นั่งอยู่ในรถช่วงแสงทอง" },
-  ],
-  outfits: [
-    "casual tank top and jeans",
-    "sporty matching workout set",
-    "summer dress",
-    "denim jacket over simple top",
-    "formal working suit",
-    "casual romper",
-    "elegant casual blouse with shorts",
+    {
+      en: "outdoor brunch cafe", th: "นั่งบรันช์คาเฟ่กลางแจ้ง",
+      outfits: ["casual summer dress", "casual romper", "elegant casual blouse with shorts"],
+    },
+    {
+      en: "shopping mall mirror selfie", th: "เซลฟี่หน้ากระจกในห้าง",
+      outfits: ["casual tank top and jeans", "denim jacket over simple top", "elegant casual blouse with shorts"],
+    },
+    {
+      en: "rooftop terrace cafe", th: "นั่งเล่นอยู่บนดาดฟ้า",
+      outfits: ["casual summer dress", "casual romper", "elegant casual blouse with shorts"],
+    },
+    {
+      en: "bookstore cafe corner", th: "นั่งอยู่ในร้านหนังสือ",
+      outfits: ["casual tank top and jeans", "denim jacket over simple top", "casual romper"],
+    },
+    {
+      en: "city street walk", th: "เดินเล่นอยู่กลางเมือง",
+      outfits: ["casual tank top and jeans", "denim jacket over simple top", "casual summer dress"],
+    },
+    {
+      en: "gym break selfie", th: "หยุดพักระหว่างออกกำลังกาย",
+      outfits: ["sporty matching workout set", "sporty tank top with leggings", "athletic crop top with shorts"],
+    },
+    {
+      en: "sitting in a parked car during golden hour", th: "นั่งอยู่ในรถช่วงแสงทอง",
+      outfits: ["casual tank top and jeans", "denim jacket over simple top", "casual summer dress"],
+    },
   ],
   moods: [
     "playful smirk",
@@ -113,22 +139,34 @@ const AFTERNOON_POOL: TimePool = {
 
 const NIGHT_POOL: TimePool = {
   scenes: [
-    { en: "rooftop dinner at night",           th: "ออกไปดินเนอร์บนดาดฟ้า" },
-    { en: "luxury hotel mirror selfie",        th: "เซลฟี่หน้ากระจกในโรงแรมหรู" },
-    { en: "soft-lit apartment living room",    th: "นั่งเล่นอยู่ในห้องนั่งเล่น" },
-    { en: "late-night convenience store stop", th: "แวะร้านสะดวกซื้อดึกๆ" },
-    { en: "evening city lights background",    th: "ถ่ายรูปหน้าวิวเมืองตอนกลางคืน" },
-    { en: "elegant restaurant table",          th: "ออกไปกินข้าวที่ร้านหรู" },
-    { en: "quiet balcony at night",            th: "นั่งอยู่บนระเบียงตอนกลางคืน" },
-  ],
-  outfits: [
-    "super casual t-shirt",
-    "black blazer outfit",
-    "elegant midi dress",
-    "cozy knit top with cardigan",
-    "long-sleeve dress",
-    "stylish evening blouse",
-    "soft loungewear set",
+    {
+      en: "rooftop dinner at night", th: "ออกไปดินเนอร์บนดาดฟ้า",
+      outfits: ["black blazer outfit", "elegant midi dress", "stylish evening blouse"],
+    },
+    {
+      en: "luxury hotel mirror selfie", th: "เซลฟี่หน้ากระจกในโรงแรมหรู",
+      outfits: ["elegant midi dress", "black blazer outfit", "long-sleeve dress"],
+    },
+    {
+      en: "soft-lit apartment living room", th: "นั่งเล่นอยู่ในห้องนั่งเล่น",
+      outfits: ["soft loungewear set", "cozy knit top with cardigan", "super casual t-shirt"],
+    },
+    {
+      en: "late-night convenience store stop", th: "แวะร้านสะดวกซื้อดึกๆ",
+      outfits: ["super casual t-shirt", "cozy knit top with cardigan", "soft loungewear set"],
+    },
+    {
+      en: "evening city lights background", th: "ถ่ายรูปหน้าวิวเมืองตอนกลางคืน",
+      outfits: ["elegant midi dress", "black blazer outfit", "stylish evening blouse"],
+    },
+    {
+      en: "elegant restaurant table", th: "ออกไปกินข้าวที่ร้านหรู",
+      outfits: ["elegant midi dress", "black blazer outfit", "long-sleeve dress"],
+    },
+    {
+      en: "quiet balcony at night", th: "นั่งอยู่บนระเบียงตอนกลางคืน",
+      outfits: ["soft loungewear set", "cozy knit top with cardigan", "super casual t-shirt"],
+    },
   ],
   moods: [
     "quiet confidence",
@@ -152,7 +190,7 @@ export function pickScene(bangkokHour: number): SceneSlot {
                                             AFTERNOON_POOL;
 
   const scene  = rand(pool.scenes);
-  const outfit = rand(pool.outfits);
+  const outfit = rand(scene.outfits);
   const mood   = rand(pool.moods);
 
   const prompt = BASE_PROMPT
