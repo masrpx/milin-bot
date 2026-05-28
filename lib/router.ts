@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { updateMilinMemory, type MilinMemory } from "./vault";
+import { updateMilinMemory, appendRecentMessages, type MilinMemory } from "./vault";
 import { handleCapture } from "./handlers/capture";
 import { handleArticle } from "./handlers/article";
 import { handleConversation } from "./handlers/conversation";
@@ -91,8 +91,16 @@ export async function routeMessage(
   const isNVDN = /^(milin\s+)?nvdn(\s|$)/i.test(text.trim());
   const isInboxQuery = /\binbox\b/i.test(text);
 
+  // All handlers return a reply string. We save every exchange to recentMessages
+  // here (fire-and-forget) so memory is complete regardless of which handler ran.
+  // conversation.ts does NOT save recentMessages itself — this is the single place.
+  async function finish(reply: string): Promise<string> {
+    if (reply) appendRecentMessages(text, reply).catch(() => {});
+    return reply;
+  }
+
   // Priority 1: approve commands — "ok 1,2", "skip", "ok ทั้งหมด" (keyword, instant)
-  if (isApproveCommand(text)) return handleApprove(text);
+  if (isApproveCommand(text)) return finish(await Promise.resolve(handleApprove(text)));
 
   // Priority 2: user is replying with a color for a pending "create" action.
   // Must run BEFORE the pre-classifier — a one-word color reply like "แดง" would
@@ -100,23 +108,23 @@ export async function routeMessage(
   if (hasPendingColorReply(memory)) {
     const reply = await handleColorReply(text, memory);
     // Empty return means the pending expired mid-check — fall through normally
-    if (reply) return reply;
+    if (reply) return finish(reply);
   }
 
   // Priority 2.1: "more" for NVDN pagination — before classifier so it doesn't route to chat
-  if (isPendingNVDNMore(text, memory)) return handleNVDN(text, memory);
+  if (isPendingNVDNMore(text, memory)) return finish(await handleNVDN(text, memory));
 
   // Priority 2.2: "ยืนยัน" confirming a reschedule (delete calendar → add to NDN)
   if (isPendingRescheduleConfirm(text, memory)) {
     const reply = await confirmReschedule(memory);
-    if (reply) return reply;
+    if (reply) return finish(reply);
   }
 
   // Priority 3: "ยืนยัน" confirming a pending delete or update
   if (isPendingCalendarConfirm(text, memory)) {
     const reply = await handleCalendarConfirm(memory);
     // Empty return means expired — fall through to conversation
-    if (reply) return reply;
+    if (reply) return finish(reply);
   }
 
   // Clear any stale expired pendingAction (fire-and-forget)
@@ -129,32 +137,32 @@ export async function routeMessage(
 
   // Priority 3.1: cap: prefix — must be before long-text check so a long cap: note
   // doesn't fall into the article handler
-  if (isTodoCapture) return handleTodoCapture(text.replace(/^cap:\s*/i, "").trim());
+  if (isTodoCapture) return finish(await handleTodoCapture(text.replace(/^cap:\s*/i, "").trim()));
 
   // Priority 3.2: NVDN query / delete
-  if (isNVDN) return handleNVDN(text, memory);
+  if (isNVDN) return finish(await handleNVDN(text, memory));
 
   // Priority 3.3: NDN commands + reschedule
-  if (isNDN || isReschedule) return handleNDN(text, memory);
+  if (isNDN || isReschedule) return finish(await handleNDN(text, memory));
 
   // Priority 4: explicit capture prefix — must be before long-text check so
   // long "จด:" notes don't fall into the article handler
-  if (isCapture) return handleCapture(text.replace(/^จด:\s*/i, "").trim());
+  if (isCapture) return finish(await handleCapture(text.replace(/^จด:\s*/i, "").trim()));
 
   // Priority 4.5: inbox query ("ขอดู inbox") — before long-text and Haiku
-  if (isInboxQuery) return handleInboxQuery();
+  if (isInboxQuery) return finish(await handleInboxQuery());
 
   // Priority 4.6: pending todo classification reply — catches "1 ndn, 2 cal พฤหัส 14.00" etc.
   // Placed after specific commands so ndn/nvdn/cap: still work while classify is pending.
-  if (isPendingTodoClassify(memory)) return handleTodoClassify(text, memory);
+  if (isPendingTodoClassify(memory)) return finish(await handleTodoClassify(text, memory));
 
   // Priority 5: URL or long text → article handler (no LLM needed to detect)
-  if (isUrl || isLongText) return handleArticle(text, isUrl);
+  if (isUrl || isLongText) return finish(await handleArticle(text, isUrl));
 
   // Priority 6: Haiku pre-classifier decides calendar / photo_request / chat.
   // Covers natural language that doesn't match any fixed keyword.
   const category = await classifier(text);
-  if (category === "calendar") return handleCalendar(text, memory);
+  if (category === "calendar") return finish(await handleCalendar(text, memory));
 
   // Priority 7: photo request — handler sends image+text directly via replyToken,
   // returns "" so the caller knows not to send another reply.
@@ -163,5 +171,5 @@ export async function routeMessage(
     return "";
   }
 
-  return handleConversation(text, memory);
+  return finish(await handleConversation(text, memory));
 }

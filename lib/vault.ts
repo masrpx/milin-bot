@@ -443,6 +443,18 @@ ${milinActivitySection}${pendingActionSection}`;
   );
 }
 
+export async function appendRecentMessages(
+  userText: string,
+  botReply: string
+): Promise<void> {
+  await updateMilinMemory({
+    recentMessages: [
+      { role: "user", content: userText.slice(0, 500) },
+      { role: "assistant", content: botReply.slice(0, 500) },
+    ],
+  });
+}
+
 export async function saveToKnowledgeQueue(
   date: string,
   items: KnowledgeItem[]

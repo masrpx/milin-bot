@@ -115,12 +115,6 @@ async function updateMemoryAsync(
       maxMood: extract.maxMood || undefined,
     }];
 
-    // Save this exchange to the rolling conversation window (trimmed to avoid bloat)
-    updates.recentMessages = [
-      { role: "user" as const, content: userMessage.slice(0, 500) },
-      { role: "assistant" as const, content: aiResponse.slice(0, 500) },
-    ];
-
     // Mood update from explicit keywords
     const moodMap: Record<string, string> = {
       เครียด: "attentive and caring",
