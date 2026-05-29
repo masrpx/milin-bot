@@ -126,6 +126,8 @@ export async function handleTodoClassify(
   const summaryLines: string[] = [];
   const newNDN: NDNItem[] = [...ndnItems];
   const newNVDN: NVDNItem[] = [...nvdnItems];
+  let ndnDirty = false;
+  let nvdnDirty = false;
   let ndnOverflow = 0;
 
   for (const action of actions) {
@@ -142,12 +144,14 @@ export async function handleTodoClassify(
         } else {
           newNDN.push({ id: item.id, text: item.text, addedAt: new Date().toISOString() });
           summaryLines.push(`• ${item.text} → NDN`);
+          ndnDirty = true;
         }
         break;
       }
       case "nvdn": {
         newNVDN.push({ id: item.id, text: item.text, archivedAt: new Date().toISOString() });
         summaryLines.push(`• ${item.text} → NVDN`);
+        nvdnDirty = true;
         break;
       }
       case "calendar": {
@@ -176,12 +180,13 @@ export async function handleTodoClassify(
   // Remove processed items from inbox
   const remainingInbox = allInbox.filter((i) => !processedIds.has(i.id));
 
-  await Promise.all([
-    saveInbox(remainingInbox, inboxSha),
-    saveNDN(newNDN, ndnSha),
-    saveNVDN(newNVDN, nvdnSha),
-  ]);
-  await updateMilinMemory({ pendingAction: undefined });
+  const writes: Promise<void>[] = [saveInbox(remainingInbox, inboxSha)];
+  if (ndnDirty) writes.push(saveNDN(newNDN, ndnSha));
+  if (nvdnDirty) writes.push(saveNVDN(newNVDN, nvdnSha));
+  await Promise.all(writes);
+  // Swallow 409 conflicts — data writes already committed; a stale pendingAction
+  // will self-clear on the next message when inbox is found empty.
+  await updateMilinMemory({ pendingAction: undefined }).catch(() => {});
 
   const remaining = remainingInbox.length;
   const footer = remaining > 0
