@@ -10,6 +10,9 @@ export const maxDuration = 300;
 const PING_WINDOW_START_ICT = 8;  // 8am ICT
 const PING_WINDOW_SLOTS = 18;     // 8am–1am = 18 hourly slots
 const MAX_DAILY_PINGS = 2;
+// GitHub Actions fires ~6 times/day instead of all 18 slots; scale denominator so
+// probability per actual fire is ~0.33 at day start rather than 0.11
+const EFFECTIVE_FIRES_PER_DAY = 6;
 const IMAGE_PROBABILITY = 0.6;
 
 const client = new Anthropic();
@@ -164,7 +167,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, sent: false, reason: "quota" });
   }
 
-  const probability = Math.min(1, remainingPings / remainingSlots);
+  const effectiveRemaining = Math.max(1, Math.round(remainingSlots * EFFECTIVE_FIRES_PER_DAY / PING_WINDOW_SLOTS));
+  const probability = Math.min(1, remainingPings / effectiveRemaining);
   if (Math.random() > probability) {
     return NextResponse.json({ ok: true, sent: false });
   }
