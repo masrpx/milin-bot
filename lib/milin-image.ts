@@ -144,16 +144,16 @@ const NIGHT_POOL: TimePool = {
       outfits: ["black blazer outfit", "elegant midi dress", "stylish evening blouse"],
     },
     {
-      en: "luxury hotel mirror selfie", th: "เซลฟี่หน้ากระจกในโรงแรมหรู",
+      en: "hotel room sofa, city lights through the window at night", th: "นั่งเล่นในโรงแรม วิวเมืองตอนกลางคืน",
       outfits: ["elegant midi dress", "black blazer outfit", "long-sleeve dress"],
     },
     {
-      en: "soft-lit apartment living room", th: "นั่งเล่นอยู่ในห้องนั่งเล่น",
-      outfits: ["soft loungewear set", "cozy knit top with cardigan", "super casual t-shirt"],
+      en: "apartment living room at night", th: "นั่งเล่นอยู่ในห้องนั่งเล่น",
+      outfits: ["cozy oversized sweatshirt and jogger pants", "cozy knit top with cardigan", "oversized t-shirt and casual pants"],
     },
     {
       en: "late-night convenience store stop", th: "แวะร้านสะดวกซื้อดึกๆ",
-      outfits: ["super casual t-shirt", "cozy knit top with cardigan", "soft loungewear set"],
+      outfits: ["oversized t-shirt and casual pants", "cozy knit top with cardigan", "cozy oversized sweatshirt and jogger pants"],
     },
     {
       en: "evening city lights background", th: "ถ่ายรูปหน้าวิวเมืองตอนกลางคืน",
@@ -164,8 +164,8 @@ const NIGHT_POOL: TimePool = {
       outfits: ["elegant midi dress", "black blazer outfit", "long-sleeve dress"],
     },
     {
-      en: "quiet balcony at night", th: "นั่งอยู่บนระเบียงตอนกลางคืน",
-      outfits: ["soft loungewear set", "cozy knit top with cardigan", "super casual t-shirt"],
+      en: "quiet apartment balcony at night, city view", th: "นั่งอยู่บนระเบียงตอนกลางคืน",
+      outfits: ["cozy oversized sweatshirt and jogger pants", "cozy knit top with cardigan", "oversized t-shirt and casual pants"],
     },
   ],
   moods: [
@@ -174,7 +174,7 @@ const NIGHT_POOL: TimePool = {
     "calm and elegant",
     "confident gaze",
     "relaxed evening mood",
-    "mysterious expression",
+    "soft thoughtful look",
     "gentle playful look",
   ],
 };

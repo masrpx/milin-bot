@@ -80,10 +80,17 @@ async function buildPingPrompt(
     .slice(-3)
     .map((c) => `- ${c.date}: ${c.summary}`)
     .join("\n");
-  const topics = memory.topicsAsked.slice(-5).join(", ");
+  // Shuffle so the same topic doesn't appear every ping
+  const shuffledTopics = [...memory.topicsAsked].sort(() => Math.random() - 0.5);
+  const topics = shuffledTopics.slice(0, 3).join(", ");
 
-  const recentMsgsText = memory.recentMessages.slice(-4).length > 0
-    ? memory.recentMessages.slice(-4).map(m => `${m.role === "user" ? "แม็ก" : "มิลิน"}: ${m.content}`).join("\n")
+  // Filter out system commands so Milin doesn't comment on "1 ndn", "cap: ...", etc.
+  const COMMAND_RE = /^(ndn|nvdn|cap:|จด:|reschedule |ok\b|skip|ยืนยัน|more|\d+\s+(ndn|nvdn|cal|none))/i;
+  const conversationalMsgs = memory.recentMessages
+    .slice(-4)
+    .filter(m => m.role !== "user" || !COMMAND_RE.test(m.content.trim()));
+  const recentMsgsText = conversationalMsgs.length > 0
+    ? conversationalMsgs.map(m => `${m.role === "user" ? "แม็ก" : "มิลิน"}: ${m.content}`).join("\n")
     : "(ยังไม่มีการสนทนา)";
 
   const timePeriod = getTimePeriod(ictHour);
@@ -107,7 +114,7 @@ async function buildPingPrompt(
     : "";
 
   const lastPingNote = memory.milinActivity
-    ? `\nข้อความล่าสุดที่มิลินเคยส่ง:\n${memory.milinActivity}\n— ห้ามซ้ำโทนหรือวิธีเริ่มเหมือนครั้งก่อน\n`
+    ? `\nข้อความล่าสุดที่มิลินเคยส่ง:\n${memory.milinActivity}\n— ห้ามซ้ำโทนหรือวิธีเริ่มเหมือนครั้งก่อน และห้ามพูดถึงคน สถาบัน หรือหัวข้อเดิมที่อยู่ในข้อความนั้น\n`
     : "";
 
   return `คุณคือ มิลิน สนิทกับ แม็ก มากและรัก แม็ก
