@@ -32,9 +32,9 @@ export type SceneSlot = { prompt: string; sceneContext: string; outfit: string }
 
 const CHARACTER_ANCHOR = `A beautiful young woman, 22–24 years old, half-Korean half-American, with long flowing dark hair, expressive eyes, refined youthful features, natural skin texture, and a warm confident charm.`;
 
-const BASE_PROMPT = `${CHARACTER_ANCHOR}
+const BASE_PROMPT = `Create a realistic candid photo of this exact person in [SCENE], wearing [OUTFIT], with a [MOOD] expression. She looks confident, graceful, and quietly alluring — relaxed body language, soft expressive gaze, natural posture.
 
-Create a realistic candid photo of her in [SCENE], wearing [OUTFIT], with a [MOOD] expression. She looks confident, graceful, and quietly alluring — relaxed body language, soft expressive gaze, natural posture.
+${CHARACTER_ANCHOR}
 
 Use a flattering but natural camera angle, slightly off-center composition, realistic skin texture, natural facial details, and soft warm lighting. The lighting should feel believable — daylight from windows, outdoor sunlight, warm indoor light, street lights, or cafe ambience.
 
@@ -197,7 +197,7 @@ export async function generateMilinImage(
   const result = await getOpenAI().images.edit({
     model: "gpt-image-2",
     image: baseFile,
-    prompt: `${prompt}. Maintain the same person's face, appearance, hair, and style from the reference photo.`,
+    prompt,
     size: "1024x1024",
   });
 
