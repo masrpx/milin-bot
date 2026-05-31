@@ -30,11 +30,7 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
 
 export type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
-const CHARACTER_ANCHOR = `A beautiful young woman, 22–24 years old, half-Korean half-American, with long flowing dark hair, expressive eyes, refined youthful features, natural skin texture, and a warm confident charm.`;
-
-const BASE_PROMPT = `Create a realistic candid photo of this exact person in [SCENE], wearing [OUTFIT], with a [MOOD] expression. She looks confident, graceful, and quietly alluring — relaxed body language, soft expressive gaze, natural posture.
-
-${CHARACTER_ANCHOR}
+const BASE_PROMPT = `Create a realistic candid photo of this exact person in [SCENE], wearing [OUTFIT], with a [MOOD] expression. She looks confident, graceful, and quietly expressive — relaxed body language, soft expressive gaze, natural posture.
 
 Use a flattering but natural camera angle, slightly off-center composition, realistic skin texture, natural facial details, and soft warm lighting. The lighting should feel believable — daylight from windows, outdoor sunlight, warm indoor light, street lights, or cafe ambience.
 
@@ -44,7 +40,7 @@ Sometimes show her actively taking the selfie — arm extended toward the camera
 
 Avoid overly perfect AI beauty, plastic skin, exaggerated posing, or heavy retouching. Keep her clearly recognizable while preserving natural imperfections and authentic body language.
 
-Style: ultra-realistic, candid photography, natural phone-camera quality, tasteful and intimate, soft warm light, imperfect realism, refined and confident mood.`;
+Style: ultra-realistic, candid photography, natural phone-camera quality, tasteful and natural, soft warm light, imperfect realism, refined and confident mood.`;
 
 type Scene = {
   en: string;
