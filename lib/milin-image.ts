@@ -27,7 +27,7 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
 
 export type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
-const BASE_PROMPT = `Realistic candid photo of this exact person at [SCENE] in Bangkok. Candid expression, relaxed posture, soft natural lighting appropriate for the time and setting. Phone-camera quality — slightly imperfect framing, mild grain, natural shadows. Sometimes catching her mid-selfie with arm extended. Tasteful and natural. Keep the vibe from the referenced image.`;
+const BASE_PROMPT = `Realistic candid photo of this exact person at [SCENE] in Bangkok. Wear an outfit naturally suited to [SCENE] — adapt clothing, style, and accessories to match the setting and time of day. Facial expression should feel authentic to the mood of [SCENE]: relaxed and sleepy for morning scenes, confident and composed for work or afternoon scenes, warm and glowing for evening or social scenes. Candid posture, soft natural lighting appropriate for the time and setting. Phone-camera quality — slightly imperfect framing, mild grain, natural shadows. Sometimes catching her mid-selfie with arm extended. Tasteful and natural. Keep the face and features from the referenced image.`;
 
 type Scene = { en: string; th: string };
 
