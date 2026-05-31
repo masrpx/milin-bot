@@ -16,7 +16,7 @@ Cron jobs (all UTC → ICT):
 | `/api/cron/research` | `0 18 * * *` | 01:00 | RSS → score → summarize → vault queue |
 | `/api/cron/morning` | `0 0 * * *` | 07:00 | Tell แม็ก research; auto-save notes; 50% image |
 | `/api/cron/organize` | `30 18 */2 * *` | 01:30 | Auto-organize 00 Inbox → PARA |
-| `/api/cron/milin-ping` | `0 1-18 * * *` | 08:00–01:00 | Hourly lottery; adaptive prob; max 2/day |
+| `/api/cron/milin-ping{1-13}` | `0 1-13 * * *` | 08:00–20:00 | Hourly lottery; adaptive prob; max 2/day |
 | `/api/cron/todo-ping` | `0 14 * * *` | 21:00 | Send inbox list → ask แม็ก to classify |
 
 ---
@@ -36,8 +36,8 @@ lib/
   vault.ts           ← GitHub vault I/O; MilinMemory R/W; parseMilinMemory (exported)
   todo.ts            ← NDN/NVDN CRUD; expireStaleNDN(); NDN_CAP=10
   line.ts            ← reply/push/image + verifyLineSignature
-  milin-prompt.ts    ← buildMilinSystemPrompt + buildMemoryExtractPrompt
-  milin-image.ts     ← 3 time-based pools (MORNING/AFTERNOON/NIGHT); exports pickScene + SceneSlot
+  milin-prompt.ts    ← buildMilinSystemPrompt(memory, vaultContext?, weatherContext?) + buildMemoryExtractPrompt + fetchBangkokWeather()
+  milin-image.ts     ← scene lists (weekday luxury PA / weekend leisure); exports pickScene(bangkokHour) + SceneSlot; gpt-image-2 decides outfit/mood from scene
   research.ts        ← RSS fetch (2/feed cap + shuffle) → Haiku score → Sonnet summarize
   fetch-article.ts   ← article text extractor
   calendar.ts        ← Google Calendar API wrapper (no googleapis)
@@ -100,9 +100,10 @@ Todo storage (bot-owned, `05 Milin/`):
 | `currentMood` | — | มิลิน's mood |
 | `relationshipStage` | — | Auto from convo count: <5 / 5–15 / 15–30 / 30+ |
 | `recentMessages` | 10 | Last 5 pairs (JSON block) — rolling context window |
-| `milinActivity` | — | Latest proactive message (from ping cron) |
+| `milinActivity` | — | Latest proactive message (from ping cron); includes `[ส่งรูปไปด้วย]` tag if image was sent |
 | `pendingAction` | — | Multi-turn calendar flow; expires 5 min |
 | `pingToday` | — | `{ date: string, count: number }` — daily quota tracker (ICT date) |
+| `lastConversationAt` | — | ISO timestamp of last real conversation — used to show "คุยกันล่าสุด X ชม.ที่แล้ว" in prompt |
 
 `pendingAction.type`: `"delete"` / `"update"` → resolved by "ยืนยัน" · `"create"` → resolved by Thai color reply · `"reschedule"` → resolved by "ยืนยัน" (deletes calendar event + adds to NDN) · `"nvdn_paginate"` → resolved by "more" (10 min TTL) · `"todo_classify"` → resolved by แม็ก's reply to 21:00 ping (24h TTL, stores `inboxSnapshot` IDs)
 
@@ -118,7 +119,7 @@ Runs every hour ICT 08:00–01:00 (`0 1-18 * * *` UTC). Max 2 pings/day.
 1. Read `memory.pingToday` — if `count >= 2` skip
 2. Adaptive probability: `min(1, remainingPings / remainingSlots)` — guarantees 2 pings spread randomly
 3. Pick type: 40% emotional / 30% flirty / 30% very_flirty
-4. `pickScene(ictHour)` — always picks scene (MORNING/AFTERNOON/NIGHT pool); passed to image gen for consistency
+4. `pickScene(ictHour)` — sync; detects Bangkok weekday vs weekend; weekday = luxury PA scenes, weekend = leisure luxury scenes; passed to image gen for consistency
 5. Fetch today's upcoming calendar events (silent fail)
 6. 60% chance: `generateMilinImage(memory, pickedScene)` — consistent scene/image
 7. Sonnet generates message with: scene context, calendar events, time-of-day tone, last ping (no repeat), last 4 actual messages (recency)
@@ -132,10 +133,11 @@ Word caps: emotional ≤120 / flirty 30–150 variable / very_flirty ≤200
 ## Conversation Handler (`lib/handlers/conversation.ts`)
 
 1. NEEDS_VAULT keyword check → `searchVault(text)` if match
-2. Build messages array from `recentMessages` (last 10) + current
-3. `buildMilinSystemPrompt(memory, vaultContext?)` + last 5 convo summaries
-4. `claude-sonnet-4-6`, max_tokens 800 — **system prompt cached** (`cache_control: ephemeral`)
-5. `updateMemoryAsync()` fire-and-forget (Haiku)
+2. Fetch vault + live Bangkok weather in parallel (`fetchBangkokWeather()` → OpenWeather API)
+3. Build messages array from `recentMessages` (last 10) + current
+4. `buildMilinSystemPrompt(memory, vaultContext?, weatherContext?)` + last 5 convo summaries — prompt includes current Bangkok time, weather, time since last convo
+5. `claude-sonnet-4-6`, max_tokens 800 — **system prompt cached** (`cache_control: ephemeral`)
+6. `updateMemoryAsync()` fire-and-forget (Haiku) — also writes `lastConversationAt` ISO timestamp
 
 NEEDS_VAULT: `?, ใคร, อะไร, ยังไง, ทำไม, เมื่อไหร่, ที่ไหน, หา, ค้นหา, สรุป, บอก, อธิบาย, แนะนำ, มีไหม, ช่วย, เรื่อง`
 
@@ -169,6 +171,7 @@ CRON_SECRET
 GOOGLE_CLIENT_ID  GOOGLE_CLIENT_SECRET  GOOGLE_REFRESH_TOKEN
 OPENAI_API_KEY
 BLOB_READ_WRITE_TOKEN
+OPENWEATHER_API_KEY
 ```
 
 ---
@@ -197,19 +200,19 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 3. **`05 Milin/` excluded** from vault search — bot never reads its own memory
 4. **Vault PARA** — always `03 Resources/` (not 04)
 5. **GitHub auto-deploy broken** — always `vercel --prod`
-6. **milin-ping adaptive probability** — reads `pingToday` from vault every slot (18 GitHub reads/day); if last 2 slots still need pings, probability clamps to 1.0
+6. **milin-ping adaptive probability** — reads `pingToday` from vault every slot (13 Vercel cron reads/day); if last 2 slots still need pings, probability clamps to 1.0
 7. **Google Calendar access_token** — never cached; refreshed every call via refresh_token
 8. **pendingAction expires 5 min** — "ยืนยัน" after expiry falls through to conversation
 9. **Color routing** — priority 2 runs before Haiku so "แดง" doesn't misroute
 10. **Calendar colorId** — `lib/calendar.ts` converts category → colorId string "1"–"11"
-11. **Image safety** — `gpt-image-2` rejects sexual content; SCENE_POOL only, never free-form. If scene triggers: find by `sceneContext`, fix in `lib/milin-image.ts`
+11. **Image safety** — `gpt-image-2` decides outfit/mood from scene description only; BASE_PROMPT avoids "alluring"/"intimate". If a scene triggers rejection, find by `sceneContext` and fix the `en` description in `lib/milin-image.ts`
 12. **recentMessages race** — `updateMemoryAsync` is concurrent R/W; rare clobber, accepted
 13. **handleApprove vestigial** — still routes "ok ทั้งหมด" but returns "ไม่มี notes ที่รอ approve"
 14. **`cap:` before long-text check** — priority 3.1 ensures a long `cap:` message doesn't fall into `handleArticle`
 15. **NDN cap 10** — cap enforced at classification time (not capture); `todo-inbox.json` / `todo-ndn.json` / `todo-nvdn.json` live in `05 Milin/`
 16. **NDN 7-day expire** — `expireStaleNDN()` runs each morning cron; expired items move to NVDN silently + note in morning message
 17. **`ndn N [time]` creates calendar without color-pick** — uses `createEvent` directly (no colorId) to avoid coupling with the color-reply flow
-18. **`pickScene` exported** — `lib/milin-image.ts` exports `pickScene(bangkokHour)` and `SceneSlot` type; ping route calls it first so text + image share the same scene
+18. **`pickScene` exported** — `lib/milin-image.ts` exports sync `pickScene(bangkokHour)` and `SceneSlot` type; ping route calls it first so text + image share the same scene; no Haiku call — gpt-image-2 infers outfit/mood from scene text
 19. **very_flirty type** — Claude may soft-limit explicit content on standard API keys; message will still be intimate/flirty if refused
 
 ---
@@ -219,6 +222,6 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 - [ ] **Sentry** — errors only in Vercel logs
 - [ ] **Staging env** — no preview environment
 - [ ] **Remove handleApprove** — vestigial, safe to delete
-- [ ] **SCENE_POOL seasonal variety** — pools are static; no seasonal/holiday variation
+- [ ] **SCENE_POOL Thai holidays** — weekend pools activate on Sat/Sun but not on Thai public holidays (weekdays)
 - [ ] **Emotion detection** — no mood layer beyond keyword map in updateMemoryAsync
 - [ ] **Provider fallback** — single Anthropic dependency; no fallback if API is down

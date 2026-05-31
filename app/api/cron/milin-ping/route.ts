@@ -8,11 +8,8 @@ import { getEvents, type CalendarEvent } from "@/lib/calendar";
 export const maxDuration = 300;
 
 const PING_WINDOW_START_ICT = 8;  // 8am ICT
-const PING_WINDOW_SLOTS = 18;     // 8am–1am = 18 hourly slots
+const PING_WINDOW_SLOTS = 13;     // 8am–8pm = 13 hourly slots
 const MAX_DAILY_PINGS = 2;
-// GitHub Actions fires ~6 times/day instead of all 18 slots; scale denominator so
-// probability per actual fire is ~0.33 at day start rather than 0.11
-const EFFECTIVE_FIRES_PER_DAY = 6;
 const IMAGE_PROBABILITY = 0.6;
 
 const client = new Anthropic();
@@ -174,8 +171,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, sent: false, reason: "quota" });
   }
 
-  const effectiveRemaining = Math.max(1, Math.round(remainingSlots * EFFECTIVE_FIRES_PER_DAY / PING_WINDOW_SLOTS));
-  const probability = Math.min(1, remainingPings / effectiveRemaining);
+  const probability = Math.min(1, remainingPings / Math.max(1, remainingSlots));
   if (Math.random() > probability) {
     return NextResponse.json({ ok: true, sent: false });
   }
