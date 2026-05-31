@@ -3,6 +3,7 @@ import { searchVault, updateMilinMemory, type MilinMemory, type RecentMessage } 
 import {
   buildMilinSystemPrompt,
   buildMemoryExtractPrompt,
+  fetchBangkokWeather,
   type MemoryExtract,
 } from "../milin-prompt";
 
@@ -20,7 +21,10 @@ export async function handleConversation(
 ): Promise<string> {
   const shouldSearchVault = NEEDS_VAULT.some((t) => text.includes(t));
 
-  const vaultResults = shouldSearchVault ? await searchVault(text) : [];
+  const [vaultResults, weather] = await Promise.all([
+    shouldSearchVault ? searchVault(text) : Promise.resolve([]),
+    fetchBangkokWeather(),
+  ]);
   const vaultContext = vaultResults.length
     ? vaultResults.join("\n\n---\n\n")
     : undefined;
@@ -34,7 +38,7 @@ export async function handleConversation(
     ? `\n\n## บทสนทนาล่าสุด\n${recentConvos}`
     : "";
 
-  const systemPrompt = buildMilinSystemPrompt(memory, vaultContext) + contextNote;
+  const systemPrompt = buildMilinSystemPrompt(memory, vaultContext, weather) + contextNote;
 
   // Build message history: last stored turns + current user message.
   // History is always valid alternating pairs (stored as user+assistant), so no sanitization needed.
@@ -99,7 +103,9 @@ async function updateMemoryAsync(
     const extract: MemoryExtract = JSON.parse(jsonMatch?.[0] || "{}");
 
     const today = new Date().toISOString().split("T")[0];
-    const updates: Partial<MilinMemory> = {};
+    const updates: Partial<MilinMemory> = {
+      lastConversationAt: new Date().toISOString(),
+    };
 
     if (extract.newFacts?.length) updates.aboutMax = extract.newFacts;
     if (extract.newPreferences?.length)

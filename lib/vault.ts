@@ -49,6 +49,8 @@ export interface MilinMemory {
   milinActivity?: string;
   // Daily ping quota tracking — ICT date + count sent today
   pingToday?: { date: string; count: number };
+  // ISO timestamp of the last real conversation with Max
+  lastConversationAt?: string;
 }
 
 export interface ConversationLog {
@@ -335,6 +337,9 @@ export function parseMilinMemory(markdown: string): MilinMemory {
     try { pingToday = JSON.parse(pingTodayMatch[1].trim()); } catch {}
   }
 
+  const lastConversationAtMatch = markdown.match(/## Last Conversation At\n([\s\S]*?)(?=\n## |$)/);
+  const lastConversationAt = lastConversationAtMatch?.[1]?.trim() || undefined;
+
   return {
     lastUpdated: new Date().toISOString(),
     aboutMax: parseListItems(aboutMaxMatch?.[1]),
@@ -347,6 +352,7 @@ export function parseMilinMemory(markdown: string): MilinMemory {
     recentMessages,
     milinActivity,
     pingToday,
+    lastConversationAt,
   };
 }
 
@@ -418,6 +424,9 @@ export async function updateMilinMemory(
   const pingTodaySection = merged.pingToday
     ? `\n## Ping Today\n${JSON.stringify(merged.pingToday)}\n`
     : "";
+  const lastConversationAtSection = merged.lastConversationAt
+    ? `\n## Last Conversation At\n${merged.lastConversationAt}\n`
+    : "";
 
   const content = `---
 last_updated: ${merged.lastUpdated}
@@ -445,7 +454,7 @@ ${merged.relationshipStage}
 \`\`\`json
 ${recentMessagesJson}
 \`\`\`
-${milinActivitySection}${pingTodaySection}${pendingActionSection}`;
+${milinActivitySection}${pingTodaySection}${lastConversationAtSection}${pendingActionSection}`;
 
   await upsertFile(
     "05 Milin/milin-memory.md",

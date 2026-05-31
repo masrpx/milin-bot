@@ -1,14 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
-import Anthropic from "@anthropic-ai/sdk";
 import OpenAI, { toFile } from "openai";
 import { put } from "@vercel/blob";
 import type { MilinMemory } from "./vault";
 
-// Lazy clients — instantiated on first call so build-time env checks don't fail
-let _anthropic: Anthropic | null = null;
+// Lazy client — instantiated on first call so build-time env checks don't fail
 let _openai: OpenAI | null = null;
-function getAnthropic() { return (_anthropic ??= new Anthropic()); }
 function getOpenAI() { return (_openai ??= new OpenAI()); }
 
 // Reference image at project root — committed to repo, read from filesystem.
@@ -30,145 +27,78 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
 
 export type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
-const BASE_PROMPT = `Create a realistic candid photo of this exact person in [SCENE], wearing [OUTFIT], with a [MOOD] expression. She looks confident, graceful, and quietly expressive — relaxed body language, soft expressive gaze, natural posture.
+const BASE_PROMPT = `Realistic candid photo of this exact person at [SCENE] in Bangkok. Candid expression, relaxed posture, soft natural lighting appropriate for the time and setting. Phone-camera quality — slightly imperfect framing, mild grain, natural shadows. Sometimes catching her mid-selfie with arm extended. Tasteful and natural. Keep the vibe from the referenced image.`;
 
-Use a flattering but natural camera angle, slightly off-center composition, realistic skin texture, natural facial details, and soft warm lighting. The lighting should feel believable — daylight from windows, outdoor sunlight, warm indoor light, street lights, or cafe ambience.
+type Scene = { en: string; th: string };
 
-The image should feel natural, spontaneous, and slightly imperfect — like a real moment captured with a phone or mirrorless camera. Include mild grain, slight softness, natural shadows, and uneven framing.
+const MORNING_SCENES: Scene[] = [
+  { en: "a luxury hotel suite getting ready in the morning, soft vanity light", th: "เตรียมตัวในห้องโรงแรมหรูยามเช้า" },
+  { en: "a high-end hotel breakfast lounge in the morning", th: "ล็อบบี้โรงแรม 5 ดาวยามเช้า" },
+  { en: "the back seat of a private car heading to work in the morning", th: "นั่งรถส่วนตัวไปทำงานยามเช้า" },
+  { en: "a penthouse balcony with Bangkok skyline in the morning light", th: "ระเบียงเพนต์เฮาส์วิวกรุงเทพยามเช้า" },
+  { en: "an upscale co-working lounge with floor-to-ceiling windows in the morning", th: "ออฟฟิศสุดหรูยามเช้า" },
+];
 
-Sometimes show her actively taking the selfie — arm extended toward the camera, front-camera angle slightly above eye level, as if caught mid-snap.
+const AFTERNOON_SCENES: Scene[] = [
+  { en: "a private business lunch at a fine-dining restaurant", th: "ประชุมมื้อกลางวันร้านหรู" },
+  { en: "a luxury department store personal shopping session in the afternoon", th: "ช้อปปิ้งห้างหรูยามบ่าย" },
+  { en: "a high-rise office lounge overlooking Bangkok in the afternoon", th: "ออฟฟิศสูงใจกลางกรุงเทพยามบ่าย" },
+  { en: "the back seat of a luxury sedan during golden hour, city passing outside", th: "นั่งรถหรูช่วงแสงทอง" },
+  { en: "a rooftop pool at a 5-star hotel in the afternoon", th: "สระว่ายน้ำดาดฟ้าโรงแรม 5 ดาวยามบ่าย" },
+];
 
-Avoid overly perfect AI beauty, plastic skin, exaggerated posing, or heavy retouching. Keep her clearly recognizable while preserving natural imperfections and authentic body language.
+const NIGHT_SCENES: Scene[] = [
+  { en: "an exclusive rooftop bar with panoramic Bangkok city lights at night", th: "รูฟท็อปบาร์วิวกรุงเทพกลางคืน" },
+  { en: "a luxury hotel suite with floor-to-ceiling windows overlooking the city at night", th: "ห้องโรงแรมหรูวิวเมืองกลางคืน" },
+  { en: "a private dining room at a fine-dining restaurant at night", th: "ห้องส่วนตัวร้านอาหารหรูกลางคืน" },
+  { en: "a high-society gala or cocktail event at night, elegant venue", th: "งานแกลาดินเนอร์กลางคืน" },
+  { en: "a penthouse living room at night with city lights through glass walls", th: "เพนต์เฮาส์วิวกรุงเทพกลางคืน" },
+];
 
-Style: ultra-realistic, candid photography, natural phone-camera quality, tasteful and natural, soft warm light, imperfect realism, refined and confident mood.`;
+// Weekend / day-off scenes — relaxed luxury leisure
+const WEEKEND_MORNING_SCENES: Scene[] = [
+  { en: "a luxury hotel bed on a day off, sleeping in, soft light through sheer curtains", th: "นอนตื่นสายในโรงแรมหรูวันหยุด" },
+  { en: "a poolside lounger at a 5-star resort in the morning, calm and serene", th: "นอนเล่นริมสระโรงแรมยามเช้าวันหยุด" },
+  { en: "a trendy brunch cafe in Bangkok on a weekend morning", th: "บรันช์คาเฟ่สุดชิควันหยุด" },
+  { en: "a luxury spa reception area on a relaxed weekend morning", th: "สปาหรูยามเช้าวันหยุด" },
+  { en: "a penthouse kitchen making coffee on a lazy weekend morning", th: "ชงกาแฟในครัวเพนต์เฮาส์วันหยุด" },
+];
 
-type Scene = {
-  en: string;
-  th: string;
-  outfits: string[];
-};
+const WEEKEND_AFTERNOON_SCENES: Scene[] = [
+  { en: "a beach club with private cabana and ocean view in the afternoon", th: "บีชคลับส่วนตัวยามบ่ายวันหยุด" },
+  { en: "a luxury rooftop pool in the afternoon sun on a day off", th: "สระว่ายน้ำดาดฟ้าวันหยุดยามบ่าย" },
+  { en: "a high-end art gallery in Bangkok on a weekend afternoon", th: "แกลเลอรีหรูยามบ่ายวันหยุด" },
+  { en: "a private yacht deck in the afternoon, sea breeze", th: "ดาดฟ้าเรือยอชต์ยามบ่ายวันหยุด" },
+  { en: "a luxury wellness resort garden in the afternoon, serene and lush", th: "สวนรีสอร์ทหรูยามบ่ายวันหยุด" },
+];
 
-type TimePool = {
-  scenes: Scene[];
-  moods: string[];
-};
-
-const MORNING_POOL: TimePool = {
-  scenes: [
-    {
-      en: "sunlit cafe window seat", th: "นั่งอยู่ที่คาเฟ่แสงแดดยามเช้า",
-      outfits: ["casual summer dress", "oversized white shirt"],
-    },
-    {
-      en: "hotel balcony after waking up", th: "ตื่นนอนมายืนอยู่ที่ระเบียงโรงแรม",
-      outfits: ["cozy oversized T-shirt and shorts", "lightweight cardigan over a simple top"],
-    },
-    {
-      en: "morning gym session", th: "ออกกำลังกายยามเช้า",
-      outfits: ["sports bra and shorts", "sporty yoga set"],
-    },
-    {
-      en: "beachside breakfast table", th: "นั่งกินอาหารเช้าริมทะเล",
-      outfits: ["casual summer dress", "casual fitted top with loose shorts"],
-    },
-    {
-      en: "casual mirror selfie before going out", th: "เซลฟี่หน้ากระจกก่อนออกไปข้างนอก",
-      outfits: ["casual summer dress", "casual fitted top with loose shorts"],
-    },
-  ],
-  moods: [
-    "sleepy soft smile",
-    "playful and fresh",
-    "naturally happy",
-    "dreamy gaze",
-    "casual confidence",
-  ],
-};
-
-const AFTERNOON_POOL: TimePool = {
-  scenes: [
-    {
-      en: "outdoor brunch cafe", th: "นั่งบรันช์คาเฟ่กลางแจ้ง",
-      outfits: ["casual summer dress", "casual romper"],
-    },
-    {
-      en: "rooftop terrace cafe", th: "นั่งเล่นอยู่บนดาดฟ้า",
-      outfits: ["casual romper", "elegant casual blouse with shorts"],
-    },
-    {
-      en: "city street walk", th: "เดินเล่นอยู่กลางเมือง",
-      outfits: ["casual tank top and jeans", "casual summer dress"],
-    },
-    {
-      en: "gym break selfie", th: "หยุดพักระหว่างออกกำลังกาย",
-      outfits: ["sports bra and shorts", "athletic crop top with shorts"],
-    },
-    {
-      en: "sitting in a parked car during golden hour", th: "นั่งอยู่ในรถช่วงแสงทอง",
-      outfits: ["casual tank top and jeans", "casual summer dress"],
-    },
-  ],
-  moods: [
-    "playful smirk",
-    "warm smile",
-    "carefree energy",
-    "light teasing smile",
-    "naturally candid",
-  ],
-};
-
-const NIGHT_POOL: TimePool = {
-  scenes: [
-    {
-      en: "rooftop dinner at night", th: "ออกไปดินเนอร์บนดาดฟ้า",
-      outfits: ["elegant midi dress", "stylish evening blouse"],
-    },
-    {
-      en: "hotel room sofa, city lights through the window at night", th: "นั่งเล่นในโรงแรม วิวเมืองตอนกลางคืน",
-      outfits: ["elegant midi dress", "long-sleeve dress"],
-    },
-    {
-      en: "elegant restaurant table", th: "ออกไปกินข้าวที่ร้านหรู",
-      outfits: ["elegant midi dress", "black blazer outfit"],
-    },
-    {
-      en: "quiet apartment balcony at night, city view", th: "นั่งอยู่บนระเบียงตอนกลางคืน",
-      outfits: ["oversized t-shirt and casual pants", "cozy knit top with cardigan"],
-    },
-    {
-      en: "late night gym session", th: "ออกกำลังกายตอนดึก",
-      outfits: ["sports bra and shorts", "sporty crop top with leggings"],
-    },
-  ],
-  moods: [
-    "quiet confidence",
-    "gentle smile",
-    "calm and elegant",
-    "confident gaze",
-    "gentle playful look",
-  ],
-};
+const WEEKEND_NIGHT_SCENES: Scene[] = [
+  { en: "an upscale Bangkok rooftop bar with friends on a weekend night", th: "รูฟท็อปบาร์กับเพื่อนคืนวันหยุด" },
+  { en: "a luxury hotel suite after a night out on the weekend, city lights outside", th: "ห้องโรงแรมหรูหลังออกไปเที่ยวคืนวันหยุด" },
+  { en: "a private villa terrace at night, ambient lighting and pool", th: "ระเบียงวิลล่าส่วนตัวกลางคืนวันหยุด" },
+  { en: "a fine-dining dinner with close friends on a weekend night", th: "ดินเนอร์กับเพื่อนร้านหรูคืนวันหยุด" },
+  { en: "a penthouse living room winding down on a weekend night", th: "พักผ่อนในเพนต์เฮาส์คืนวันหยุด" },
+];
 
 function rand<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
 export function pickScene(bangkokHour: number): SceneSlot {
-  const pool =
-    bangkokHour >= 20 || bangkokHour < 6 ? NIGHT_POOL :
-    bangkokHour < 12                      ? MORNING_POOL :
-                                            AFTERNOON_POOL;
+  const bangkokNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const isWeekend = bangkokNow.getUTCDay() === 0 || bangkokNow.getUTCDay() === 6;
 
-  const scene  = rand(pool.scenes);
-  const outfit = rand(scene.outfits);
-  const mood   = rand(pool.moods);
+  const isNight   = bangkokHour >= 20 || bangkokHour < 6;
+  const isMorning = bangkokHour < 12;
 
-  const prompt = BASE_PROMPT
-    .replaceAll("[SCENE]",  scene.en)
-    .replaceAll("[OUTFIT]", outfit)
-    .replaceAll("[MOOD]",   mood);
+  const scenes = isWeekend
+    ? isNight   ? WEEKEND_NIGHT_SCENES   : isMorning ? WEEKEND_MORNING_SCENES   : WEEKEND_AFTERNOON_SCENES
+    : isNight   ? NIGHT_SCENES           : isMorning ? MORNING_SCENES           : AFTERNOON_SCENES;
 
-  return { prompt, sceneContext: scene.th, outfit };
+  const scene = rand(scenes);
+  const prompt = BASE_PROMPT.replaceAll("[SCENE]", scene.en);
+
+  return { prompt, sceneContext: scene.th, outfit: scene.th };
 }
 
 export async function generateMilinImage(

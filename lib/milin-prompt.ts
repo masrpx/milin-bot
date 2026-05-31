@@ -1,8 +1,40 @@
 import type { MilinMemory } from "./vault";
 
+export async function fetchBangkokWeather(): Promise<string | undefined> {
+  const key = process.env.OPENWEATHER_API_KEY;
+  if (!key) return undefined;
+  try {
+    const res = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=13.7563&lon=100.5018&appid=${key}&units=metric&lang=th`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return undefined;
+    const d = await res.json();
+    const desc: string = d.weather?.[0]?.description ?? "";
+    const temp = Math.round(d.main?.temp ?? 0);
+    const humidity: number = d.main?.humidity ?? 0;
+    return `${desc} ${temp}°C ความชื้น ${humidity}%`;
+  } catch {
+    return undefined;
+  }
+}
+
+function timeSinceLastConvo(iso?: string): string {
+  if (!iso) return "(ไม่ทราบ)";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 2)   return "เพิ่งคุยกันเมื่อกี้";
+  if (mins < 60)  return `${mins} นาทีที่แล้ว`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs} ชั่วโมงที่แล้ว`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return `${days} วันที่แล้ว`;
+  return "นานกว่า 1 สัปดาห์ที่แล้ว";
+}
+
 export function buildMilinSystemPrompt(
   memory: MilinMemory,
   vaultContext?: string,
+  weatherContext?: string,
 ): string {
   const aboutMaxLines = memory.aboutMax.length
     ? memory.aboutMax.join("\n")
@@ -12,10 +44,19 @@ export function buildMilinSystemPrompt(
     ? memory.learnedPreferences.join("\n")
     : "กำลังเรียนรู้เพิ่มเติม";
 
-  const today = new Date().toLocaleDateString("th-TH", {
+  const now = new Date();
+  const today = now.toLocaleDateString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
+  });
+  const nowTime = now.toLocaleTimeString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 
   const topicsLines = memory.topicsAsked?.length
@@ -66,8 +107,11 @@ ${vaultContext || "(ไม่มีข้อมูลเพิ่มเติม
 
 ## ข้อความที่ มิลิน เพิ่งส่งหา แม็ก
 ${memory.milinActivity || "(ยังไม่มี — ยังไม่ได้ส่งข้อความหาก่อน)"}
+ถ้ามี [ส่งรูปไปด้วย] อยู่ด้านบน — มิลินรู้ตัวว่าส่งรูปตัวเองไปแล้ว และถ้าแม็ก compliment ลักษณะหรือพูดถึงรูป → แม็กกำลัง react กับรูปนั้น ไม่ใช่สิ่งอื่น
 
-วันที่ปัจจุบัน: ${today}`;
+วันและเวลาปัจจุบัน: ${today} เวลา ${nowTime} น.
+สภาพอากาศกรุงเทพตอนนี้: ${weatherContext ?? "(ไม่ทราบ)"}
+คุยกันล่าสุด: ${timeSinceLastConvo(memory.lastConversationAt)}`;
 }
 
 export interface MemoryExtract {
