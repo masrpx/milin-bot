@@ -10,7 +10,7 @@ export const maxDuration = 300;
 const PING_WINDOW_START_ICT = 8;  // 8am ICT
 const PING_WINDOW_SLOTS = 13;     // 8am–8pm = 13 hourly slots
 const MAX_DAILY_PINGS = 2;
-const IMAGE_PROBABILITY = 0.6;
+const IMAGE_PROBABILITY = 0.7;
 
 const client = new Anthropic();
 
