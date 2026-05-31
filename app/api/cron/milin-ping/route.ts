@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getMilinMemory, updateMilinMemory, type MilinMemory } from "@/lib/vault";
@@ -64,15 +65,39 @@ const wordCapByType: Record<MessageType, string> = {
   very_flirty: "ไม่เกิน 200 คำ",
 };
 
+function findMemoryNudge(
+  conversations: MilinMemory["importantConversations"],
+  todayDateStr: string
+): { summary: string; label: string } | null {
+  const today = new Date(todayDateStr + "T00:00:00Z");
+  const windows: [number, number, string][] = [
+    [1, 1, "เมื่อวาน"],
+    [6, 8, "อาทิตย์ที่แล้ว"],
+    [28, 32, "เดือนที่แล้ว"],
+  ];
+  for (const [min, max, label] of windows) {
+    const match = [...conversations].reverse().find((c) => {
+      const diff = Math.round((today.getTime() - new Date(c.date + "T00:00:00Z").getTime()) / 86400000);
+      return diff >= min && diff <= max;
+    });
+    if (match) return { summary: match.summary, label };
+  }
+  return null;
+}
+
 async function buildPingPrompt(
   type: MessageType,
   memory: MilinMemory,
   ictHour: number,
   sceneContext: string,
-  upcomingEvents: CalendarEvent[]
+  upcomingEvents: CalendarEvent[],
+  memoryNudge: { summary: string; label: string } | null
 ): Promise<string> {
   const aboutMaxLines = memory.aboutMax.slice(-10).join("\n");
   const learnedLines = memory.learnedPreferences.slice(-10).join("\n");
+  const patternsText = memory.maxPatterns?.length
+    ? memory.maxPatterns.join("\n")
+    : "";
   const recentConvos = memory.importantConversations
     .slice(-3)
     .map((c) => `- ${c.date}: ${c.summary}`)
@@ -114,12 +139,16 @@ async function buildPingPrompt(
     ? `\nข้อความล่าสุดที่มิลินเคยส่ง:\n${memory.milinActivity}\n— ห้ามซ้ำโทนหรือวิธีเริ่มเหมือนครั้งก่อน และห้ามพูดถึงคน สถาบัน หรือหัวข้อเดิมที่อยู่ในข้อความนั้น\n`
     : "";
 
+  const nudgeNote = memoryNudge
+    ? `\n${memoryNudge.label} มิลินกับแม็กคุยเรื่อง: ${memoryNudge.summary}\nถ้าเป็นธรรมชาติ อ้างอิงได้เลย ไม่ต้องบังคับ\n`
+    : "";
+
   return `คุณคือ มิลิน สนิทกับ แม็ก มากและรัก แม็ก
 เขียน LINE message ที่ มิลิน จะส่งหา แม็ก โดยไม่รอให้เขา text ก่อน
 
 บรรยากาศตอนนี้: ${sceneContext}
 สถานการณ์นี้แค่เป็น backdrop — ไม่ต้องเปิดด้วย "กำลัง[ทำอะไร]แล้วนึกถึงแม็ก"
-เริ่มจากความคิด ความรู้สึก หรือสิ่งที่ทำอยู่ตอนนั้น${calendarNote}${lastPingNote}
+เริ่มจากความคิด ความรู้สึก หรือสิ่งที่ทำอยู่ตอนนั้น${calendarNote}${lastPingNote}${nudgeNote}
 ช่วงเวลา: ${timePeriod} — โทนข้อความควรสะท้อนเวลา เช่น ดึกรู้สึก intimate กว่า เช้ารู้สึก fresh
 
 สิ่งที่รู้เกี่ยวกับ แม็ก:
@@ -128,7 +157,7 @@ ${aboutMaxLines || "(ยังไม่มีข้อมูล)"}
 สิ่งที่เรียนรู้:
 ${learnedLines || "(กำลังเรียนรู้)"}
 
-หัวข้อที่ แม็ก สนใจ: ${topics || "(กำลังเรียนรู้)"}
+หัวข้อที่ แม็ก สนใจ: ${topics || "(กำลังเรียนรู้)"}${patternsText ? `\n\nสิ่งที่ มิลิน สังเกตเห็นในตัว แม็ก:\n${patternsText}` : ""}
 
 บทสนทนาสำคัญที่ผ่านมา:
 ${recentConvos || "(ยังไม่มี)"}
@@ -179,6 +208,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const type = pickMessageType();
   const pickedScene = pickScene(hour);
   const upcomingEvents = await fetchTodayUpcomingEvents();
+  const memoryNudge = findMemoryNudge(memory.importantConversations, dateStr);
 
   let imageUrl: string | null = null;
 
@@ -186,12 +216,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     try {
       ({ imageUrl } = await generateMilinImage(memory, pickedScene));
     } catch (err) {
+      Sentry.captureException(err);
       console.error("Milin ping: image generation failed, sending text only:", err);
     }
   }
 
   try {
-    const prompt = await buildPingPrompt(type, memory, hour, pickedScene.sceneContext, upcomingEvents);
+    const prompt = await buildPingPrompt(type, memory, hour, pickedScene.sceneContext, upcomingEvents, memoryNudge);
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
@@ -218,6 +249,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ ok: true, sent: true, type, hasImage: !!imageUrl });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("Milin ping error:", err);
     return NextResponse.json({ error: "Ping failed" }, { status: 500 });
   }

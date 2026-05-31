@@ -3,7 +3,6 @@ import { updateMilinMemory, appendRecentMessages, appendChatHistory, type MilinM
 import { handleCapture } from "./handlers/capture";
 import { handleArticle } from "./handlers/article";
 import { handleConversation } from "./handlers/conversation";
-import { handleApprove, isApproveCommand } from "./handlers/approve";
 import {
   handleCalendar,
   handleCalendarConfirm,
@@ -101,9 +100,6 @@ export async function routeMessage(
     }
     return reply;
   }
-
-  // Priority 1: approve commands — "ok 1,2", "skip", "ok ทั้งหมด" (keyword, instant)
-  if (isApproveCommand(text)) return finish(await Promise.resolve(handleApprove(text)));
 
   // Priority 2: user is replying with a color for a pending "create" action.
   // Must run BEFORE the pre-classifier — a one-word color reply like "แดง" would

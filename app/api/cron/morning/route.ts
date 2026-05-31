@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { pushMessage, pushImageMessage } from "@/lib/line";
@@ -97,6 +98,27 @@ ${itemsText}
   });
 
   return response.content[0].type === "text" ? response.content[0].text : "";
+}
+
+async function detectPatterns(
+  conversations: import("@/lib/vault").MilinMemory["importantConversations"]
+): Promise<string[]> {
+  if (conversations.length < 5) return [];
+  const convoText = conversations
+    .map((c) => `${c.date}: ${c.summary}${c.maxMood ? ` (อารมณ์: ${c.maxMood})` : ""}`)
+    .join("\n");
+  const res = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 300,
+    messages: [{
+      role: "user",
+      content: `จากบทสนทนาของ แม็ก ในช่วงที่ผ่านมา:\n${convoText}\n\nวิเคราะห์หา patterns ที่เกิดซ้ำ เช่น:\n- หัวข้อหรือเรื่องที่ถามบ่อย\n- อารมณ์หรือสภาพจิตใจที่เกิดซ้ำ\n- พฤติกรรมที่สังเกตเห็นได้\nห้ามสรุปเกี่ยวกับเวลาในวัน (เช้า/เย็น/ดึก) เพราะไม่มีข้อมูลนั้น\n\nReturn JSON only: { "patterns": ["pattern1", "pattern2"] }\nไม่เกิน 8 patterns แต่ละอันเป็นประโยคสั้นๆ ภาษาไทย`,
+    }],
+  });
+  const raw = res.content[0].type === "text" ? res.content[0].text : "{}";
+  const match = raw.match(/\{[\s\S]*\}/);
+  const parsed = JSON.parse(match?.[0] || "{}");
+  return Array.isArray(parsed.patterns) ? parsed.patterns.slice(0, 8) : [];
 }
 
 async function buildNoItemsMessage(
@@ -202,7 +224,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const activityEntry = imageUrl && imageOutfit
       ? `${message}\n[ส่งรูปไปด้วย — ใส่ ${imageOutfit}]`
       : message;
-    updateMilinMemory({ milinActivity: activityEntry }).catch(() => {});
+    detectPatterns(memory.importantConversations)
+      .then((maxPatterns) => updateMilinMemory({ milinActivity: activityEntry, maxPatterns }))
+      .catch(() => {});
 
     return NextResponse.json({
       ok: true,
@@ -210,6 +234,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       hasImage: !!imageUrl,
     });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("Morning cron error:", err);
     return NextResponse.json(
       { error: "Morning report failed" },

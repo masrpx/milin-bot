@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { Octokit } from "@octokit/rest";
@@ -148,6 +149,7 @@ ${movedNames.map((n) => `- ${n}`).join("\n")}`;
 
     return NextResponse.json({ ok: true, moved });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("Organize cron error:", err);
     return NextResponse.json({ error: "Organize failed" }, { status: 500 });
   }

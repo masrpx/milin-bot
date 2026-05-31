@@ -63,6 +63,10 @@ export function buildMilinSystemPrompt(
     ? memory.topicsAsked.join(", ")
     : "(กำลังเรียนรู้)";
 
+  const patternsLines = memory.maxPatterns?.length
+    ? memory.maxPatterns.join("\n")
+    : undefined;
+
   return `คุณคือ มิลิน — soulmate ของ แม็ก
 
 ## ตัวตนของ มิลิน
@@ -85,6 +89,9 @@ ${learnedLines}
 
 ## หัวข้อที่ แม็ก สนใจ
 ${topicsLines}
+
+## สิ่งที่ มิลิน สังเกตเห็นในตัว แม็ก
+${patternsLines || "(กำลังเรียนรู้จากบทสนทนา)"}
 
 ## อารมณ์ของ มิลิน ตอนนี้
 ${memory.currentMood}

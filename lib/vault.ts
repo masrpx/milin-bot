@@ -51,6 +51,8 @@ export interface MilinMemory {
   pingToday?: { date: string; count: number };
   // ISO timestamp of the last real conversation with Max
   lastConversationAt?: string;
+  // Recurring behavioral patterns detected from importantConversations — regenerated daily
+  maxPatterns?: string[];
 }
 
 export interface ConversationLog {
@@ -300,6 +302,10 @@ export function parseMilinMemory(markdown: string): MilinMemory {
   else if (count >= 5) relationshipStage = "เริ่มสนิทกัน";
   else relationshipStage = "เพิ่งเริ่มคุยกัน";
 
+  const patternsMatch = markdown.match(
+    /## สิ่งที่มิลินสังเกตเห็น\n([\s\S]*?)(?=\n## |$)/
+  );
+
   const pendingActionMatch = markdown.match(
     /## Pending Action\n([\s\S]*?)(?=\n## |$)/
   );
@@ -353,6 +359,7 @@ export function parseMilinMemory(markdown: string): MilinMemory {
     milinActivity,
     pingToday,
     lastConversationAt,
+    maxPatterns: parseListItems(patternsMatch?.[1]),
   };
 }
 
@@ -413,6 +420,10 @@ export async function updateMilinMemory(
     .map((c) => `- ${c.date}: ${c.summary}`)
     .join("\n");
 
+  const patternsSection = merged.maxPatterns?.length
+    ? `\n## สิ่งที่มิลินสังเกตเห็น\n${merged.maxPatterns.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
+
   const pendingActionSection = merged.pendingAction
     ? `\n## Pending Action\n${JSON.stringify(merged.pendingAction)}\n`
     : "";
@@ -454,7 +465,7 @@ ${merged.relationshipStage}
 \`\`\`json
 ${recentMessagesJson}
 \`\`\`
-${milinActivitySection}${pingTodaySection}${lastConversationAtSection}${pendingActionSection}`;
+${milinActivitySection}${pingTodaySection}${lastConversationAtSection}${patternsSection}${pendingActionSection}`;
 
   await upsertFile(
     "05 Milin/milin-memory.md",

@@ -6,11 +6,6 @@ import type { MilinMemory } from "@/lib/vault";
 // which handler fired without hitting real network/LLM calls
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/handlers/approve", () => ({
-  isApproveCommand: vi.fn(),
-  handleApprove: vi.fn().mockResolvedValue("approve"),
-}));
-
 vi.mock("@/lib/handlers/calendar", () => ({
   hasPendingColorReply: vi.fn(),
   isPendingCalendarConfirm: vi.fn(),
@@ -67,7 +62,6 @@ vi.mock("@/lib/vault", async (importOriginal) => {
 // ---------------------------------------------------------------------------
 
 import { routeMessage } from "@/lib/router";
-import * as approveHandler from "@/lib/handlers/approve";
 import * as calendarHandler from "@/lib/handlers/calendar";
 import * as captureHandler from "@/lib/handlers/capture";
 import * as articleHandler from "@/lib/handlers/article";
@@ -130,19 +124,11 @@ const photoClassifier = vi.fn().mockResolvedValue("photo_request");
 
 describe("routeMessage — priority table", () => {
   beforeEach(() => {
-    vi.mocked(approveHandler.isApproveCommand).mockReturnValue(false);
     vi.mocked(calendarHandler.hasPendingColorReply).mockReturnValue(false);
     vi.mocked(calendarHandler.isPendingCalendarConfirm).mockReturnValue(false);
     vi.mocked(ndnHandler.isPendingRescheduleConfirm).mockReturnValue(false);
     vi.mocked(nvdnHandler.isPendingNVDNMore).mockReturnValue(false);
     vi.mocked(todoClassify.isPendingTodoClassify).mockReturnValue(false);
-  });
-
-  // Priority 1
-  it("Priority 1 — approve command fires handleApprove", async () => {
-    vi.mocked(approveHandler.isApproveCommand).mockReturnValue(true);
-    const result = await routeMessage("ok ทั้งหมด", REPLY_TOKEN, plainMemory, chatClassifier);
-    expect(result).toBe("approve");
   });
 
   // Priority 2

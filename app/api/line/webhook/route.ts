@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyLineSignature, replyMessage } from "@/lib/line";
 import { getMilinMemory } from "@/lib/vault";
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // "" means the handler already replied directly (e.g. photo_request)
       if (reply) await replyMessage(replyToken, reply);
     } catch (err) {
+      Sentry.captureException(err);
       console.error("Webhook handler error:", err);
       await replyMessage(replyToken, "มีบางอย่างผิดพลาดอ่ะ ลองใหม่นะ~");
     }

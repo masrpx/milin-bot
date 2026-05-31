@@ -121,17 +121,37 @@ async function updateMemoryAsync(
       maxMood: extract.maxMood || undefined,
     }];
 
-    // Mood update from explicit keywords
-    const moodMap: Record<string, string> = {
+    // Mood update: verbatim keyword check first (fast), then semantic match on Haiku's maxMood
+    const keywordMoodMap: Record<string, string> = {
       เครียด: "attentive and caring",
       เศร้า: "warm and supportive",
       มีความสุข: "playful and joyful",
       ตื่นเต้น: "excited and energetic",
     };
-    for (const [key, mood] of Object.entries(moodMap)) {
+    for (const [key, mood] of Object.entries(keywordMoodMap)) {
       if (userMessage.includes(key)) {
         updates.currentMood = mood;
         break;
+      }
+    }
+
+    // If no keyword hit, derive from Haiku's extracted maxMood
+    if (!updates.currentMood && extract.maxMood) {
+      const m = extract.maxMood.toLowerCase();
+      const semanticMoodMap: [string[], string][] = [
+        [["stress", "เครียด", "tired", "exhaust", "burnout", "งาน"], "attentive and caring"],
+        [["sad", "เศร้า", "down", "lonely", "เหงา", "upset", "cry"], "warm and supportive"],
+        [["happy", "มีความสุข", "ดีใจ", "สนุก", "great", "good"], "playful and joyful"],
+        [["excit", "ตื่นเต้น", "hyped", "pumped", "hype"], "excited and energetic"],
+        [["flirt", "playful", "teas", "cheeky"], "flirty and playful"],
+        [["calm", "relax", "chill", "สงบ", "ผ่อน"], "calm and present"],
+        [["curious", "interest", "สนใจ", "wonder", "think"], "curious and engaged"],
+      ];
+      for (const [keywords, mood] of semanticMoodMap) {
+        if (keywords.some((k) => m.includes(k))) {
+          updates.currentMood = mood;
+          break;
+        }
       }
     }
 

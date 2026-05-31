@@ -84,9 +84,12 @@ function rand<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+const SPECIAL_DAYS = new Set(["01-01", "02-14", "04-13", "04-14", "04-15", "12-25"]);
+
 export function pickScene(bangkokHour: number): SceneSlot {
   const bangkokNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
-  const isWeekend = bangkokNow.getUTCDay() === 0 || bangkokNow.getUTCDay() === 6;
+  const bangkokMMDD = bangkokNow.toISOString().slice(5, 10);
+  const isWeekend = bangkokNow.getUTCDay() === 0 || bangkokNow.getUTCDay() === 6 || SPECIAL_DAYS.has(bangkokMMDD);
 
   const isNight   = bangkokHour >= 20 || bangkokHour < 6;
   const isMorning = bangkokHour < 12;

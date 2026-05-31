@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { pushMessage } from "@/lib/line";
 import { getInbox } from "@/lib/todo";
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ ok: true, sent: true, itemCount: items.length });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("todo-ping cron error:", err);
     return NextResponse.json({ error: "todo-ping failed" }, { status: 500 });
   }

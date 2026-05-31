@@ -42,7 +42,6 @@ lib/
   fetch-article.ts   ← article text extractor
   calendar.ts        ← Google Calendar API wrapper (no googleapis)
   handlers/
-    approve.ts       ← "ok 1,2" / "skip" (vestigial — morning auto-saves now)
     article.ts       ← URL/long text → atomic notes
     calendar.ts      ← Google Calendar CRUD + intent detection
     capture.ts       ← "จด:" → 00 Inbox
@@ -53,7 +52,7 @@ lib/
     ndn.ts           ← NDN list/delete/move-to-nvdn/schedule/reschedule
     nvdn.ts          ← NVDN query + "more" pagination
 
-__tests__/           ← Vitest: line, vault, milin-prompt, router, todo (67 tests)
+__tests__/           ← Vitest: line, vault, milin-prompt, router, todo (66 tests)
 milin-image-1.png    ← reference photo for gpt-image-2 (PNG/WebP, SFW)
 ```
 
@@ -70,7 +69,6 @@ Todo storage (bot-owned, `05 Milin/`):
 
 | Priority | Condition | Handler |
 |---|---|---|
-| 1 | `isApproveCommand()` | `handleApprove` — "ok 1,2", "ok ทั้งหมด", "skip" |
 | 2 | `hasPendingColorReply()` | `handleColorReply` — Thai color for pending create |
 | 2.1 | `isPendingNVDNMore()` — text="more" + nvdn_paginate pending | `handleNVDN` — next page |
 | 2.2 | `isPendingRescheduleConfirm()` — "ยืนยัน" + reschedule pending | `confirmReschedule` |
@@ -97,7 +95,7 @@ Todo storage (bot-owned, `05 Milin/`):
 | `learnedPreferences` | 30 | Habits, style, likes/dislikes |
 | `topicsAsked` | 20 | Intellectual topics |
 | `importantConversations` | 30 | One summary per conversation |
-| `currentMood` | — | มิลิน's mood |
+| `currentMood` | — | มิลิน's mood — updated each conversation via keyword map + semantic match on Haiku's `maxMood` |
 | `relationshipStage` | — | Auto from convo count: <5 / 5–15 / 15–30 / 30+ |
 | `recentMessages` | 10 | Last 5 pairs (JSON block) — rolling context window |
 | `milinActivity` | — | Latest proactive message (from ping cron); includes `[ส่งรูปไปด้วย]` tag if image was sent |
@@ -119,13 +117,13 @@ Runs every hour ICT 08:00–01:00 (`0 1-18 * * *` UTC). Max 2 pings/day.
 1. Read `memory.pingToday` — if `count >= 2` skip
 2. Adaptive probability: `min(1, remainingPings / remainingSlots)` — guarantees 2 pings spread randomly
 3. Pick type: 40% emotional / 30% flirty / 30% very_flirty
-4. `pickScene(ictHour)` — sync; detects Bangkok weekday vs weekend; weekday = luxury PA scenes, weekend = leisure luxury scenes; passed to image gen for consistency
+4. `pickScene(ictHour)` — sync; detects Bangkok weekday vs weekend vs `SPECIAL_DAYS` (01-01, 02-14, 04-13–15, 12-25); weekday = luxury PA scenes, weekend/holiday = leisure luxury scenes; passed to image gen for consistency
 5. Fetch today's upcoming calendar events (silent fail)
-6. 60% chance: `generateMilinImage(memory, pickedScene)` — consistent scene/image
-7. Sonnet generates message with: scene context, calendar events, time-of-day tone, last ping (no repeat), last 4 actual messages (recency)
-8. Push image (if any) + text to LINE
-9. Fire-and-forget: update `milinActivity` + `pingToday.count++`
-
+6. `findMemoryNudge()` — checks `importantConversations` for entries from yesterday / last week / last month; injects summary into prompt if found
+7. 70% chance: `generateMilinImage(memory, pickedScene)` — consistent scene/image
+8. Sonnet generates message with: scene context, calendar events, time-of-day tone, last ping (no repeat), memory nudge (if any), last 4 actual messages (recency)
+9. Push image (if any) + text to LINE
+10. Fire-and-forget: update `milinActivity` + `pingToday.count++`
 Word caps: emotional ≤120 / flirty 30–150 variable / very_flirty ≤200
 
 ---
@@ -137,7 +135,7 @@ Word caps: emotional ≤120 / flirty 30–150 variable / very_flirty ≤200
 3. Build messages array from `recentMessages` (last 10) + current
 4. `buildMilinSystemPrompt(memory, vaultContext?, weatherContext?)` + last 5 convo summaries — prompt includes current Bangkok time, weather, time since last convo
 5. `claude-sonnet-4-6`, max_tokens 800 — **system prompt cached** (`cache_control: ephemeral`)
-6. `updateMemoryAsync()` fire-and-forget (Haiku) — also writes `lastConversationAt` ISO timestamp
+6. `updateMemoryAsync()` fire-and-forget (Haiku) — also writes `lastConversationAt` ISO timestamp; updates `currentMood` via keyword map then semantic match on Haiku's `maxMood`
 
 NEEDS_VAULT: `?, ใคร, อะไร, ยังไง, ทำไม, เมื่อไหร่, ที่ไหน, หา, ค้นหา, สรุป, บอก, อธิบาย, แนะนำ, มีไหม, ช่วย, เรื่อง`
 
@@ -172,6 +170,7 @@ GOOGLE_CLIENT_ID  GOOGLE_CLIENT_SECRET  GOOGLE_REFRESH_TOKEN
 OPENAI_API_KEY
 BLOB_READ_WRITE_TOKEN
 OPENWEATHER_API_KEY
+SENTRY_DSN
 ```
 
 ---
@@ -207,21 +206,18 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 10. **Calendar colorId** — `lib/calendar.ts` converts category → colorId string "1"–"11"
 11. **Image safety** — `gpt-image-2` decides outfit/mood from scene description only; BASE_PROMPT avoids "alluring"/"intimate". If a scene triggers rejection, find by `sceneContext` and fix the `en` description in `lib/milin-image.ts`
 12. **recentMessages race** — `updateMemoryAsync` is concurrent R/W; rare clobber, accepted
-13. **handleApprove vestigial** — still routes "ok ทั้งหมด" but returns "ไม่มี notes ที่รอ approve"
-14. **`cap:` before long-text check** — priority 3.1 ensures a long `cap:` message doesn't fall into `handleArticle`
+13. **`cap:` before long-text check** — priority 3.1 ensures a long `cap:` message doesn't fall into `handleArticle`
 15. **NDN cap 10** — cap enforced at classification time (not capture); `todo-inbox.json` / `todo-ndn.json` / `todo-nvdn.json` live in `05 Milin/`
 16. **NDN 7-day expire** — `expireStaleNDN()` runs each morning cron; expired items move to NVDN silently + note in morning message
 17. **`ndn N [time]` creates calendar without color-pick** — uses `createEvent` directly (no colorId) to avoid coupling with the color-reply flow
-18. **`pickScene` exported** — `lib/milin-image.ts` exports sync `pickScene(bangkokHour)` and `SceneSlot` type; ping route calls it first so text + image share the same scene; no Haiku call — gpt-image-2 infers outfit/mood from scene text
+18. **`pickScene` exported** — `lib/milin-image.ts` exports sync `pickScene(bangkokHour)` and `SceneSlot` type; ping route calls it first so text + image share the same scene; no Haiku call — gpt-image-2 infers outfit/mood from scene text; `SPECIAL_DAYS` (MM-DD set) triggers leisure pool on holidays
 19. **very_flirty type** — Claude may soft-limit explicit content on standard API keys; message will still be intimate/flirty if refused
+20. **Emotion detection** — `updateMemoryAsync` first checks verbatim Thai keywords, then does substring match on Haiku's `maxMood` against semantic buckets (stressed/sad/happy/excited/flirty/calm/curious)
+21. **Memory nudge** — `findMemoryNudge()` in ping route scans `importantConversations` for yesterday / last week (±1d) / last month (±2d); injects Thai relative label + summary into prompt if found
 
 ---
 
 ## Backlog
 
-- [ ] **Sentry** — errors only in Vercel logs
 - [ ] **Staging env** — no preview environment
-- [ ] **Remove handleApprove** — vestigial, safe to delete
-- [ ] **SCENE_POOL Thai holidays** — weekend pools activate on Sat/Sun but not on Thai public holidays (weekdays)
-- [ ] **Emotion detection** — no mood layer beyond keyword map in updateMemoryAsync
 - [ ] **Provider fallback** — single Anthropic dependency; no fallback if API is down
