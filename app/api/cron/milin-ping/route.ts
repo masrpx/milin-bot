@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getMilinMemory, updateMilinMemory, type MilinMemory } from "@/lib/vault";
+import { findMemoryNudge } from "@/lib/milin-prompt";
 import { pushMessage, pushImageMessage } from "@/lib/line";
 import { generateMilinImage, pickScene } from "@/lib/milin-image";
 import { getEvents, type CalendarEvent } from "@/lib/calendar";
@@ -65,25 +66,6 @@ const wordCapByType: Record<MessageType, string> = {
   very_flirty: "ไม่เกิน 200 คำ",
 };
 
-function findMemoryNudge(
-  conversations: MilinMemory["importantConversations"],
-  todayDateStr: string
-): { summary: string; label: string } | null {
-  const today = new Date(todayDateStr + "T00:00:00Z");
-  const windows: [number, number, string][] = [
-    [1, 1, "เมื่อวาน"],
-    [6, 8, "อาทิตย์ที่แล้ว"],
-    [28, 32, "เดือนที่แล้ว"],
-  ];
-  for (const [min, max, label] of windows) {
-    const match = [...conversations].reverse().find((c) => {
-      const diff = Math.round((today.getTime() - new Date(c.date + "T00:00:00Z").getTime()) / 86400000);
-      return diff >= min && diff <= max;
-    });
-    if (match) return { summary: match.summary, label };
-  }
-  return null;
-}
 
 async function buildPingPrompt(
   type: MessageType,

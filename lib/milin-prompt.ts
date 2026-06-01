@@ -128,6 +128,28 @@ ${(() => {
 คุยกันล่าสุด: ${timeSinceLastConvo(memory.lastConversationAt)}`;
 }
 
+export function findMemoryNudge(
+  conversations: MilinMemory["importantConversations"],
+  todayDateStr: string
+): { summary: string; label: string } | null {
+  const today = new Date(todayDateStr + "T00:00:00Z");
+  const windows: [number, number, string][] = [
+    [1, 1, "เมื่อวาน"],
+    [6, 8, "อาทิตย์ที่แล้ว"],
+    [28, 32, "เดือนที่แล้ว"],
+  ];
+  for (const [min, max, label] of windows) {
+    const match = [...conversations].reverse().find((c) => {
+      const diff = Math.round(
+        (today.getTime() - new Date(c.date + "T00:00:00Z").getTime()) / 86400000
+      );
+      return diff >= min && diff <= max;
+    });
+    if (match) return { summary: match.summary, label };
+  }
+  return null;
+}
+
 export interface MemoryExtract {
   newFacts: string[];
   newPreferences: string[];
