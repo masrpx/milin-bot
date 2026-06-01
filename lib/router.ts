@@ -167,7 +167,7 @@ export async function routeMessage(
   // returns "" so the caller knows not to send another reply.
   if (category === "photo_request") {
     await handlePhotoRequest(replyToken, memory);
-    appendChatHistory(text, "[ส่งรูป]").catch(() => {});
+    appendChatHistory(text, "(ส่งรูป)").catch(() => {});
     return "";
   }
 

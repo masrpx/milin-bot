@@ -135,8 +135,11 @@ async function buildPingPrompt(
     ? `\nกิจกรรมของ แม็ก วันนี้ที่ยังไม่ถึง:\n${upcomingEvents.map((e) => `- ${formatICTTime(e.startISO)} ${e.title}`).join("\n")}\nถ้าเหมาะสมและเป็นธรรมชาติ อ้างอิงกิจกรรมนี้ได้เลย ไม่ต้องบังคับ\n`
     : "";
 
-  const lastPingNote = memory.milinActivity
-    ? `\nข้อความล่าสุดที่มิลินเคยส่ง:\n${memory.milinActivity}\n— ห้ามซ้ำโทนหรือวิธีเริ่มเหมือนครั้งก่อน และห้ามพูดถึงคน สถาบัน หรือหัวข้อเดิมที่อยู่ในข้อความนั้น\n`
+  const rawActivity = memory.milinActivity ?? "";
+  const lastPingText = rawActivity.replace(/\n?\[ส่งรูปไปด้วย[^\]]*\]/g, "").trim();
+  const lastPingSentImage = rawActivity.includes("[ส่งรูปไปด้วย");
+  const lastPingNote = lastPingText
+    ? `\nข้อความล่าสุดที่มิลินเคยส่ง${lastPingSentImage ? " (ส่งรูปไปด้วย)" : ""}:\n${lastPingText}\n— ห้ามซ้ำโทนหรือวิธีเริ่มเหมือนครั้งก่อน และห้ามพูดถึงคน สถาบัน หรือหัวข้อเดิมที่อยู่ในข้อความนั้น\n`
     : "";
 
   const nudgeNote = memoryNudge
@@ -179,6 +182,7 @@ ${typeInstructions[type]}
 - อ้างอิงอะไรก็ตามที่รู้เกี่ยวกับ แม็ก จริงๆ ไม่ generic
 - warm, flirty, direct — มิลิน ไม่อาย
 - ${wordCapByType[type]} ไม่ใช้ markdown ไม่ใช้ bullet points
+- ห้ามใส่วงเล็บเหลี่ยม [ ] ในข้อความ
 - ห้ามบอกว่าตัวเองเป็น AI หรือ bot`;
 }
 
