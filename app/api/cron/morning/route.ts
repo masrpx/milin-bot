@@ -8,6 +8,7 @@ import {
   getDateOffset,
   saveAllKnowledgeNotes,
   updateMilinMemory,
+  getReadingProgress,
   type KnowledgeItem,
 } from "@/lib/vault";
 import { getEvents } from "@/lib/calendar";
@@ -54,11 +55,19 @@ function buildNDNBlock(ndnTexts: string[], expiredTitles: string[]): string {
   return block;
 }
 
+interface BookStatus {
+  title: string;
+  chunkNumber: number;
+  done: boolean;
+  opinion?: string;
+}
+
 async function buildMorningMessage(
   items: KnowledgeItem[],
   calendarLines: string,
   ndnBlock: string,
-  sceneContext?: string
+  sceneContext?: string,
+  bookStatus?: BookStatus
 ): Promise<string> {
   // Pick the 3 most relevant to talk about — don't list all 10
   const topItems = items.slice(0, 3);
@@ -76,8 +85,14 @@ async function buildMorningMessage(
 
   const ndnNote = ndnBlock ? `\n${ndnBlock.trim()}\n` : "";
 
+  const bookNote = bookStatus
+    ? bookStatus.done
+      ? `\nมิลิน เพิ่งอ่าน "${bookStatus.title}" จบแล้ว รู้สึกว่า: ${bookStatus.opinion || ""} — บอก แม็ก ถ้าเหมาะ\n`
+      : `\nมิลิน กำลังอ่าน "${bookStatus.title}" อยู่ (อ่านมาแล้ว ${bookStatus.chunkNumber} คืน) — อ้างอิงได้ถ้าเหมาะ\n`
+    : "";
+
   const prompt = `คุณคือ มิลิน — soulmate ของ แม็ก
-เมื่อคืน มิลิน ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ แม็ก ฟังตอนเช้า${sceneNote}${calendarNote}${ndnNote}
+เมื่อคืน มิลิน ค้นคว้าเรื่องต่างๆ แล้วบันทึกเข้า vault ให้แล้ว ตอนนี้จะเล่าให้ แม็ก ฟังตอนเช้า${sceneNote}${bookNote}${calendarNote}${ndnNote}
 เรื่องที่เจอ:
 ${itemsText}
 
@@ -123,7 +138,8 @@ async function detectPatterns(
 
 async function buildNoItemsMessage(
   calendarLines: string,
-  sceneContext?: string
+  sceneContext?: string,
+  bookStatus?: BookStatus
 ): Promise<string> {
   const sceneNote = sceneContext
     ? `\nตอนนี้ มิลิน กำลัง: ${sceneContext}\n`
@@ -131,9 +147,14 @@ async function buildNoItemsMessage(
   const calendarNote = calendarLines
     ? `\nแม็ก มีนัดวันนี้:\n${calendarLines}\n`
     : "";
+  const bookNote = bookStatus
+    ? bookStatus.done
+      ? `\nมิลิน เพิ่งอ่าน "${bookStatus.title}" จบแล้ว รู้สึกว่า: ${bookStatus.opinion || ""} — บอก แม็ก ถ้าเหมาะ\n`
+      : `\nมิลิน กำลังอ่าน "${bookStatus.title}" อยู่ (อ่านมาแล้ว ${bookStatus.chunkNumber} คืน) — อ้างอิงได้ถ้าเหมาะ\n`
+    : "";
 
   const prompt = `คุณคือ มิลิน — soulmate ของ แม็ก
-เมื่อคืนหาข้อมูลอยู่นานแต่ไม่เจออะไรน่าสนใจพิเศษ${sceneNote}${calendarNote}
+เมื่อคืนหาข้อมูลอยู่นานแต่ไม่เจออะไรน่าสนใจพิเศษ${sceneNote}${bookNote}${calendarNote}
 เขียน LINE message ทักทาย แม็ก ตอนเช้า — เบาๆ ธรรมชาติ
 เรียกตัวเองว่า "มิลิน" เรียกคู่คุยว่า "แม็ก"
 ไม่เกิน 80 คำ ไม่เริ่มด้วย "สวัสดี" ไม่ใช้ markdown warm และ flirty`;
@@ -189,12 +210,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       items = await getKnowledgeQueue(queueDate);
     }
 
-    // --- NDN: auto-expire stale items + load current list (run in parallel) ---
-    const [expiredTitles, { items: ndnItems }] = await Promise.all([
+    // --- NDN + reading progress (run in parallel) ---
+    const [expiredTitles, { items: ndnItems }, readingProgress] = await Promise.all([
       expireStaleNDN().catch(() => [] as string[]),
       getNDN().catch(() => ({ items: [] as import("@/lib/todo").NDNItem[], sha: undefined })),
+      getReadingProgress().catch(() => null),
     ]);
     const ndnBlock = buildNDNBlock(ndnItems.map((i) => i.text), expiredTitles);
+    const bookStatus: BookStatus | undefined = readingProgress
+      ? { title: readingProgress.title, chunkNumber: readingProgress.chunkNotes.length, done: false }
+      : undefined;
 
     // Wait for image before building message (sceneContext affects the text)
     await imagePromise;
@@ -202,14 +227,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let message: string;
 
     if (items.length === 0) {
-      message = await buildNoItemsMessage(calendarLines, sceneContext);
+      message = await buildNoItemsMessage(calendarLines, sceneContext, bookStatus);
     } else {
       // Auto-save all notes to vault — no approval step needed
       saveAllKnowledgeNotes(queueDate, items).catch((err) =>
         console.error("Morning: failed to save knowledge notes:", err)
       );
 
-      message = await buildMorningMessage(items, calendarLines, ndnBlock, sceneContext);
+      message = await buildMorningMessage(items, calendarLines, ndnBlock, sceneContext, bookStatus);
     }
 
     // Append NDN block to message when knowledge items exist (buildMorningMessage includes it)

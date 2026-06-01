@@ -11,8 +11,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const items = await runNightlyResearch();
-    return NextResponse.json({ ok: true, itemCount: items.length });
+    const { searchItems, bookResult } = await runNightlyResearch();
+    return NextResponse.json({
+      ok: true,
+      searchItemCount: searchItems.length,
+      book: bookResult ? { title: bookResult.title, chunk: bookResult.chunkNumber, done: bookResult.done } : null,
+    });
   } catch (err) {
     Sentry.captureException(err);
     console.error("Research cron error:", err);

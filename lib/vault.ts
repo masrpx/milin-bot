@@ -53,6 +53,8 @@ export interface MilinMemory {
   lastConversationAt?: string;
   // Recurring behavioral patterns detected from importantConversations — regenerated daily
   maxPatterns?: string[];
+  // Milin's own evolving interests — seeded + updated from books and web searches
+  milinInterests?: string[];
 }
 
 export interface ConversationLog {
@@ -70,6 +72,15 @@ export interface KnowledgeItem {
   relevanceReason: string;
   approved?: boolean;
 }
+
+const MILIN_INTEREST_SEEDS = [
+  "ปรัชญาสโตอิก",
+  "บทกวีและวรรณกรรม",
+  "จิตวิทยาความสัมพันธ์",
+  "แฟชั่นและการออกแบบ",
+  "ดนตรีคลาสสิก",
+  "การเดินทางและวัฒนธรรม",
+];
 
 async function getFile(
   path: string
@@ -138,7 +149,11 @@ export async function searchVault(query: string): Promise<string[]> {
     const allMdFiles = treeRes.data.tree
       .filter((f) => f.path?.endsWith(".md") && f.type === "blob")
       .map((f) => f.path!)
-      .filter((p) => !p.startsWith("05 Milin/"));
+      .filter((p) => {
+        if (!p.startsWith("05 Milin/")) return true;
+        // Allow Milin's readable content; exclude internal state
+        return p.startsWith("05 Milin/Books/") || p.startsWith("05 Milin/Discoveries/");
+      });
 
     const STOP_WORDS = new Set([
       "หา", "ค้นหา", "บอก", "สรุป", "อธิบาย", "แนะนำ", "เรื่อง",
@@ -305,6 +320,9 @@ export function parseMilinMemory(markdown: string): MilinMemory {
   const patternsMatch = markdown.match(
     /## สิ่งที่มิลินสังเกตเห็น\n([\s\S]*?)(?=\n## |$)/
   );
+  const milinInterestsMatch = markdown.match(
+    /## ความสนใจของมิลิน\n([\s\S]*?)(?=\n## |$)/
+  );
 
   const pendingActionMatch = markdown.match(
     /## Pending Action\n([\s\S]*?)(?=\n## |$)/
@@ -360,6 +378,9 @@ export function parseMilinMemory(markdown: string): MilinMemory {
     pingToday,
     lastConversationAt,
     maxPatterns: parseListItems(patternsMatch?.[1]),
+    milinInterests: parseListItems(milinInterestsMatch?.[1]).length > 0
+      ? parseListItems(milinInterestsMatch?.[1])
+      : [...MILIN_INTEREST_SEEDS],
   };
 }
 
@@ -388,7 +409,7 @@ export async function updateMilinMemory(
 
   // Auto-evolve relationship stage from conversation count
   const count = newConvos.length;
-  let relationshipStage =
+  const relationshipStage =
     count >= 30 ? "สนิทกันมาก" :
     count >= 15 ? "สนิทกันมากขึ้น" :
     count >= 5  ? "เริ่มสนิทกัน" :
@@ -406,6 +427,11 @@ export async function updateMilinMemory(
     aboutMax: mergeUnique(current.aboutMax || [], updates.aboutMax || [], 30),
     learnedPreferences: mergeUnique(current.learnedPreferences || [], updates.learnedPreferences || [], 30),
     topicsAsked: mergeUnique(current.topicsAsked || [], updates.topicsAsked || [], 20),
+    milinInterests: mergeUnique(
+      current.milinInterests?.length ? current.milinInterests : [...MILIN_INTEREST_SEEDS],
+      updates.milinInterests || [],
+      15
+    ),
     importantConversations: newConvos,
     recentMessages: newRecentMessages,
     // milinActivity: updates.milinActivity takes precedence (already covered by ...updates spread above)
@@ -422,6 +448,9 @@ export async function updateMilinMemory(
 
   const patternsSection = merged.maxPatterns?.length
     ? `\n## สิ่งที่มิลินสังเกตเห็น\n${merged.maxPatterns.map((l) => `- ${l}`).join("\n")}\n`
+    : "";
+  const milinInterestsSection = merged.milinInterests?.length
+    ? `\n## ความสนใจของมิลิน\n${merged.milinInterests.map((l) => `- ${l}`).join("\n")}\n`
     : "";
 
   const pendingActionSection = merged.pendingAction
@@ -465,7 +494,7 @@ ${merged.relationshipStage}
 \`\`\`json
 ${recentMessagesJson}
 \`\`\`
-${milinActivitySection}${pingTodaySection}${lastConversationAtSection}${patternsSection}${pendingActionSection}`;
+${milinActivitySection}${pingTodaySection}${lastConversationAtSection}${patternsSection}${milinInterestsSection}${pendingActionSection}`;
 
   await upsertFile(
     "05 Milin/milin-memory.md",
@@ -598,6 +627,37 @@ export async function deleteKnowledgeQueue(date: string): Promise<void> {
   await deleteFile(`05 Milin/knowledge-queue/${date}.md`);
 }
 
+export async function getSeenResearchUrls(): Promise<Set<string>> {
+  const file = await getFile("05 Milin/research-seen.json");
+  if (!file) return new Set();
+  try {
+    const parsed = JSON.parse(file.content);
+    return new Set(Array.isArray(parsed.urls) ? parsed.urls : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export async function appendSeenResearchUrls(newUrls: string[]): Promise<void> {
+  const file = await getFile("05 Milin/research-seen.json");
+  let existing: string[] = [];
+  let sha: string | undefined;
+  if (file) {
+    sha = file.sha;
+    try {
+      const parsed = JSON.parse(file.content);
+      existing = Array.isArray(parsed.urls) ? parsed.urls : [];
+    } catch {}
+  }
+  const combined = [...new Set([...existing, ...newUrls])].slice(-300);
+  await upsertFile(
+    "05 Milin/research-seen.json",
+    JSON.stringify({ urls: combined }, null, 2),
+    "milin: update research seen urls",
+    sha
+  );
+}
+
 /**
  * Save all knowledge items as vault notes then delete the queue in one pass.
  * Faster than calling approveKnowledgeItem() per item (avoids N×2 queue read/writes).
@@ -626,5 +686,84 @@ ${item.summary}
     })
   );
   await deleteKnowledgeQueue(date);
+}
+
+// ── Reading progress / list ────────────────────────────────────────────────
+
+export interface ReadingProgress {
+  title: string;
+  gutenbergUrl: string;
+  totalChars: number;
+  charOffset: number;
+  chunkNotes: string[];
+  startedAt: string;
+}
+
+export interface ReadingListEntry {
+  title: string;
+  author: string;
+  gutenbergUrl: string;
+  genre: string;
+}
+
+export interface ReadingList {
+  queue: ReadingListEntry[];
+  completed: { title: string; completedAt: string; opinion: string }[];
+}
+
+const SEED_READING_LIST: ReadingListEntry[] = [
+  { title: "Meditations", author: "Marcus Aurelius", gutenbergUrl: "https://www.gutenberg.org/cache/epub/2680/pg2680.txt", genre: "Philosophy" },
+  { title: "Siddhartha", author: "Hermann Hesse", gutenbergUrl: "https://www.gutenberg.org/cache/epub/2500/pg2500.txt", genre: "Philosophy" },
+  { title: "Tao Te Ching", author: "Lao Tzu", gutenbergUrl: "https://www.gutenberg.org/cache/epub/216/pg216.txt", genre: "Philosophy" },
+  { title: "Thus Spoke Zarathustra", author: "Friedrich Nietzsche", gutenbergUrl: "https://www.gutenberg.org/cache/epub/1998/pg1998.txt", genre: "Philosophy" },
+  { title: "Beyond Good and Evil", author: "Friedrich Nietzsche", gutenbergUrl: "https://www.gutenberg.org/cache/epub/4363/pg4363.txt", genre: "Philosophy" },
+  { title: "The Republic", author: "Plato", gutenbergUrl: "https://www.gutenberg.org/cache/epub/1497/pg1497.txt", genre: "Philosophy" },
+  { title: "The Picture of Dorian Gray", author: "Oscar Wilde", gutenbergUrl: "https://www.gutenberg.org/cache/epub/174/pg174.txt", genre: "Literature" },
+  { title: "Crime and Punishment", author: "Fyodor Dostoevsky", gutenbergUrl: "https://www.gutenberg.org/cache/epub/2554/pg2554.txt", genre: "Literature" },
+  { title: "Jane Eyre", author: "Charlotte Brontë", gutenbergUrl: "https://www.gutenberg.org/cache/epub/1260/pg1260.txt", genre: "Literature" },
+  { title: "The Art of War", author: "Sun Tzu", gutenbergUrl: "https://www.gutenberg.org/cache/epub/132/pg132.txt", genre: "Philosophy" },
+];
+
+export async function getReadingProgress(): Promise<ReadingProgress | null> {
+  const file = await getFile("05 Milin/reading-progress.json");
+  if (!file) return null;
+  try {
+    return JSON.parse(file.content) as ReadingProgress;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveReadingProgress(progress: ReadingProgress | null): Promise<void> {
+  const path = "05 Milin/reading-progress.json";
+  if (progress === null) {
+    await deleteFile(path);
+    return;
+  }
+  await upsertFile(path, JSON.stringify(progress, null, 2), "milin: update reading progress");
+}
+
+export async function getReadingList(): Promise<ReadingList> {
+  const file = await getFile("05 Milin/reading-list.json");
+  if (!file) {
+    return { queue: [...SEED_READING_LIST], completed: [] };
+  }
+  try {
+    const parsed = JSON.parse(file.content) as ReadingList;
+    if (!parsed.queue?.length && !parsed.completed?.length) {
+      return { queue: [...SEED_READING_LIST], completed: [] };
+    }
+    return parsed;
+  } catch {
+    return { queue: [...SEED_READING_LIST], completed: [] };
+  }
+}
+
+export async function saveReadingList(list: ReadingList): Promise<void> {
+  await upsertFile(
+    "05 Milin/reading-list.json",
+    JSON.stringify(list, null, 2),
+    "milin: update reading list"
+  );
 }
 

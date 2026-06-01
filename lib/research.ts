@@ -1,185 +1,32 @@
-import Anthropic from "@anthropic-ai/sdk";
-import Parser from "rss-parser";
-import { fetchArticleText } from "./fetch-article";
 import {
   getMilinMemory,
   saveToKnowledgeQueue,
+  appendSeenResearchUrls,
   type KnowledgeItem,
 } from "./vault";
+import { readNextBookChunk, type BookReadResult } from "./book-reader";
+import { runWebSearch } from "./web-search";
 
-const client = new Anthropic();
-const rssParser = new Parser();
+export type { BookReadResult };
 
-const DEFAULT_RSS_FEEDS = [
-  // Biohacking / Longevity
-  "https://peterattiamd.com/feed",
-  "https://jeffnippard.com/blogs/news.atom",
-  "https://www.hubermanlab.com/feed",
-  // Investing / Finance
-  "https://advisors.vanguard.com/insights/rss",
-  "https://blogs.cfainstitute.org/investor/feed",
-  "https://www.morningstar.com/rss/articles",
-  "https://www.valuewalk.com/feed",
-  // AI / Tech
-  "http://karpathy.github.io/feed.xml",
-  "https://www.totaltypescript.com/rss.xml",
-  "https://www.aihero.dev/rss.xml",
-  // Philosophy / Mindset
-  "https://fs.blog/feed",
-  "https://aeon.co/feed.rss",
-];
-
-async function fetchRssItems(
-  feedUrl: string
-): Promise<{ title: string; link: string; content: string; pubDate: string }[]> {
-  try {
-    const feed = await rssParser.parseURL(feedUrl);
-    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-
-    return feed.items
-      .filter((item) => {
-        if (!item.pubDate) return true;
-        return new Date(item.pubDate).getTime() > fourteenDaysAgo;
-      })
-      .slice(0, 8)
-      .map((item) => ({
-        title: item.title || "",
-        link: item.link || feedUrl,
-        content: item.contentSnippet || item.content || "",
-        pubDate: item.pubDate || "",
-      }));
-  } catch {
-    return [];
-  }
-}
-
-
-async function scoreAndCreateNote(
-  title: string,
-  snippet: string,
-  url: string,
-  sourceType: KnowledgeItem["sourceType"],
-  interests: string[]
-): Promise<KnowledgeItem | null> {
-  // Step 1: quick relevance score on snippet (cheap)
-  const quickPrompt = `Score relevance 1-10 for แม็ก's interests: ${interests.slice(0, 7).join(", ")}
-Title: ${title}
-Snippet: ${snippet.slice(0, 400)}
-Return JSON only: {"score": 7}
-If clearly irrelevant return: {"score": 0}`;
-
-  const quickRes = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 30,
-    messages: [{ role: "user", content: quickPrompt }],
-  });
-  const quickRaw = quickRes.content[0].type === "text" ? quickRes.content[0].text : "{}";
-  const quickScore = JSON.parse(quickRaw.match(/\{[\s\S]*\}/)?.[0] || "{}").score || 0;
-  if (quickScore < 6) return null;
-
-  // Step 2: fetch full article for items that passed
-  const fullText = await fetchArticleText(url, 6000).catch(() => "");
-  const content = fullText.length > 300 ? fullText : snippet;
-
-  // Step 3: summarize from full content
-  const prompt = `Summarize this article as an atomic note for แม็ก's Obsidian vault.
-
-แม็ก's interests: ${interests.join(", ")}
-
-Vault structure (PARA method):
-- 01 Projects
-- 02 Areas
-- 03 Resources/Biohacking, 03 Resources/Finance, 03 Resources/AI, 03 Resources/Psychology, 03 Resources/Business, 03 Resources/Dhamma, 03 Resources/Gaming
-- 04 Archives
-- 05 มิลิน (bot only, never use this)
-
-Title: ${title}
-Content: ${content.slice(0, 5000)}
-
-Return JSON only:
-{
-  "summary": "3-5 sentence substantive summary with key insights",
-  "suggestedVaultPath": "03 Resources/Biohacking",
-  "relevanceReason": "specific reason Max would care"
-}`;
-
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 500,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const raw =
-    response.content[0].type === "text" ? response.content[0].text : "{}";
-  const result = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || "{}");
-
-  return {
-    title,
-    source: url,
-    sourceType,
-    summary: result.summary || snippet.slice(0, 300),
-    suggestedVaultPath: result.suggestedVaultPath || "00 Inbox",
-    relevanceReason: result.relevanceReason || "",
-    approved: false,
-  };
-}
-
-export async function runNightlyResearch(): Promise<KnowledgeItem[]> {
+export async function runNightlyResearch(): Promise<{
+  searchItems: KnowledgeItem[];
+  bookResult: BookReadResult | null;
+}> {
   const memory = await getMilinMemory();
 
-  const interests = [
-    "Dhamma",
-    "Biohacking",
-    "Business scaling",
-    "Investing",
-    "Gaming",
-    "Psychology",
-    "AI",
-    ...memory.aboutMax,
-  ];
+  const [bookResult, searchItems] = await Promise.all([
+    readNextBookChunk(memory).catch(() => null),
+    runWebSearch(memory).catch(() => [] as KnowledgeItem[]),
+  ]);
 
-  const rawFindings: { title: string; content: string; source: string; type: KnowledgeItem["sourceType"] }[] = [];
-
-  // RSS feeds
-  const allRssItems = await Promise.all(
-    DEFAULT_RSS_FEEDS.map(fetchRssItems)
-  );
-  for (const items of allRssItems) {
-    // Cap at 2 per feed so no single category (e.g. biohacking) dominates the pool
-    for (const item of items.slice(0, 2)) {
-      rawFindings.push({
-        title: item.title,
-        content: item.content,
-        source: item.link,
-        type: "rss",
-      });
-    }
-  }
-
-  // Shuffle before slicing so scoring is spread across all topics, not front-loaded
-  // (16 feeds × 2 items = ~32 candidates → shuffle → take 25)
-  const shuffled = rawFindings.sort(() => Math.random() - 0.5);
-  const cappedFindings = shuffled.slice(0, 25);
-
-  // Score, fetch full article, and summarize (sequential to avoid hammering servers)
-  // Hard time budget: stop at 4 min so Vercel doesn't kill the function mid-save
-  const BUDGET_MS = 4 * 60 * 1000;
-  const startTime = Date.now();
-  const scored: (KnowledgeItem | null)[] = [];
-  for (const f of cappedFindings) {
-    if (Date.now() - startTime > BUDGET_MS) break;
-    const item = await scoreAndCreateNote(f.title, f.content, f.source, f.type, interests);
-    scored.push(item);
-  }
-
-  const filtered = scored
-    .filter((item): item is KnowledgeItem => item !== null)
-    .slice(0, 10);
-
-  if (filtered.length > 0) {
+  // Only search items go through the knowledge-queue pipeline (auto-saved to vault each morning)
+  // Book progress is stored in reading-progress.json by book-reader — not in the queue
+  if (searchItems.length > 0) {
     const today = new Date().toISOString().split("T")[0];
-    await saveToKnowledgeQueue(today, filtered);
+    await saveToKnowledgeQueue(today, searchItems);
+    appendSeenResearchUrls(searchItems.map((i) => i.source)).catch(() => {});
   }
 
-  return filtered;
+  return { searchItems, bookResult };
 }
