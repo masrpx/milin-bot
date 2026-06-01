@@ -98,7 +98,7 @@ Todo storage (bot-owned, `05 Milin/`):
 | `currentMood` | — | มิลิน's mood — updated each conversation via keyword map + semantic match on Haiku's `maxMood` |
 | `relationshipStage` | — | Auto from convo count: <5 / 5–15 / 15–30 / 30+ |
 | `recentMessages` | 10 | Last 5 pairs (JSON block) — rolling context window |
-| `milinActivity` | — | Latest proactive message (from ping cron); includes `[ส่งรูปไปด้วย]` tag if image was sent |
+| `milinActivity` | — | Latest proactive message (from ping/morning cron); includes `[ส่งรูปไปด้วย — ใส่ ...]` annotation if image was sent — **stripped before injecting into any prompt** (both `milin-prompt.ts` and `milin-ping/route.ts` strip it; prose note used instead) |
 | `pendingAction` | — | Multi-turn calendar flow; expires 5 min |
 | `pingToday` | — | `{ date: string, count: number }` — daily quota tracker (ICT date) |
 | `lastConversationAt` | — | ISO timestamp of last real conversation — used to show "คุยกันล่าสุด X ชม.ที่แล้ว" in prompt |
