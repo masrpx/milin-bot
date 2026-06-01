@@ -27,57 +27,65 @@ function detectImageType(buf: Buffer): { contentType: string; ext: string } {
 
 export type SceneSlot = { prompt: string; sceneContext: string; outfit: string };
 
-const BASE_PROMPT = `Realistic candid phone photo of this exact person at [SCENE] in Bangkok. She is wearing an outfit naturally suited to [SCENE], with clothing, styling, and accessories that feel realistic, tasteful, and commonly worn in that setting and time of day. The outfit may be casual, sporty, sleeveless, fitted, cropped, or realistic activewear when appropriate for the scene, as long as it feels natural and everyday rather than sexualized, provocative, or body-focused. Her facial expression should feel authentic to the mood of [SCENE]: relaxed and sleepy for morning scenes, confident and composed for work or afternoon scenes, and warm and glowing for evening or social scenes. Use candid posture, soft natural lighting appropriate to the time and setting, and realistic phone-camera quality with slightly imperfect framing, mild grain, and natural shadows. Sometimes she may be captured mid-selfie with her arm extended. Keep the overall image tasteful, natural, believable, respectful, non-suggestive, and grounded in an everyday editorial lifestyle mood. Keep the face and features from the referenced image.`;
+const BASE_PROMPT = `Realistic candid phone photo of the referenced adult person, shown in the following setting: [SCENE]. Keep the person clearly recognizable and preserve her core facial features, face shape, and overall identity from the reference image. Create a natural everyday lifestyle image with believable surroundings and ordinary activity, as if captured spontaneously in a real moment.
+
+Clothing should naturally fit the scene and time of day, while reflecting Milin's polished quiet-luxury taste: elegant, refined, expensive-looking, well-fitted, tasteful, and realistic for the setting. Casual, smart-casual, sporty, sleeveless, cropped, fitted, or activity-appropriate outfits are allowed when natural for the scene, but they should still look elevated, clean, non-suggestive, and not body-focused.
+
+Use a natural scene-appropriate facial expression, ranging from calm and relaxed to a genuine warm smile or cheerful candid smile when it fits the moment, with relaxed candid posture. The camera angle and framing should follow this shot type: [SHOT TYPE]. Keep the composition realistic, casual, and appropriate for a spontaneous phone photo.
+
+Use soft realistic lighting, slight phone-camera imperfections, mild grain, natural shadows, and slightly imperfect framing. The overall image should feel warm, believable, respectful, elegant, and non-suggestive, with a natural editorial lifestyle mood and no body-focused framing. If the scene implies a personal vibe, keep it subtle, gentle, and wholesome rather than provocative. Preserve the feeling that she is a polished, feminine, dependable personal assistant with her own refined lifestyle, while still feeling natural and grounded in everyday life.`;
+
+const SHOT_TYPES = [
+  "front-camera selfie, arm extended naturally, casual phone snapshot framing",
+  "mirror selfie in a natural everyday way, neutral standing posture, realistic indoor lighting",
+  "candid photo taken by another person, slightly imperfect timing and natural composition",
+  "seated table-level candid shot, natural posture, phone-camera perspective from across the table",
+  "walking candid shot, natural motion, slightly off-center phone-camera framing",
+];
 
 type Scene = { en: string; th: string };
 
 const MORNING_SCENES: Scene[] = [
-  { en: "a luxury hotel suite getting ready in the morning, soft vanity light", th: "เตรียมตัวในห้องโรงแรมหรูยามเช้า" },
-  { en: "a high-end hotel breakfast lounge in the morning", th: "ล็อบบี้โรงแรม 5 ดาวยามเช้า" },
-  { en: "the back seat of a private car heading to work in the morning", th: "นั่งรถส่วนตัวไปทำงานยามเช้า" },
-  { en: "a penthouse balcony with Bangkok skyline in the morning light", th: "ระเบียงเพนต์เฮาส์วิวกรุงเทพยามเช้า" },
-  { en: "an upscale co-working lounge with floor-to-ceiling windows in the morning", th: "ออฟฟิศสุดหรูยามเช้า" },
+  { en: "a luxury hotel room in the morning, standing near the window while checking the day's schedule, soft natural light, polished executive lifestyle mood", th: "ห้องโรงแรมหรูยามเช้า ยืนริมหน้าต่างเช็กตารางงาน" },
+  { en: "a high-end hotel breakfast lounge, having coffee and reviewing notes before work, calm elegant morning atmosphere", th: "ล็อบบี้โรงแรมหรูยามเช้า จิบกาแฟและทบทวนโน้ตก่อนทำงาน" },
+  { en: "the back seat of a private car heading to work, checking phone and planner, quiet luxury commute mood", th: "นั่งรถส่วนตัวไปทำงาน เช็กโทรศัพท์และแพลนเนอร์" },
+  { en: "an upscale co-working lounge with floor-to-ceiling windows, preparing for the day with laptop and coffee, refined professional energy", th: "เลานจ์ทำงานสุดหรูยามเช้า เตรียมตัวสำหรับวันทำงาน" },
 ];
 
 const AFTERNOON_SCENES: Scene[] = [
-  { en: "a private business lunch at a fine-dining restaurant", th: "ประชุมมื้อกลางวันร้านหรู" },
-  { en: "a luxury department store personal shopping session in the afternoon", th: "ช้อปปิ้งห้างหรูยามบ่าย" },
-  { en: "a high-rise office lounge overlooking Bangkok in the afternoon", th: "ออฟฟิศสูงใจกลางกรุงเทพยามบ่าย" },
-  { en: "the back seat of a luxury sedan during golden hour, city passing outside", th: "นั่งรถหรูช่วงแสงทอง" },
-  { en: "a rooftop pool at a 5-star hotel in the afternoon", th: "สระว่ายน้ำดาดฟ้าโรงแรม 5 ดาวยามบ่าย" },
+  { en: "a private business lunch at a fine-dining restaurant, seated with a notebook and phone, composed and polished professional mood", th: "มื้อกลางวันธุรกิจร้านอาหารหรู นั่งกับโน้ตบุ๊กและโทรศัพท์" },
+  { en: "a luxury department store personal shopping session, browsing refined workwear and accessories, elegant city lifestyle atmosphere", th: "ช้อปปิ้งส่วนตัวในห้างหรู เลือกชุดทำงานและอุปกรณ์เสริมยามบ่าย" },
+  { en: "a high-rise office lounge overlooking Bangkok, reviewing documents by the window, capable executive assistant energy", th: "เลานจ์ออฟฟิศสูงใจกลางกรุงเทพ ดูเอกสารริมหน้าต่างยามบ่าย" },
+  { en: "the back seat of a luxury sedan during golden hour, looking out the window while checking messages, calm refined city mood", th: "นั่งรถหรูช่วงแสงทอง มองออกหน้าต่างพร้อมเช็กข้อความ" },
 ];
 
 const NIGHT_SCENES: Scene[] = [
-  { en: "an exclusive rooftop bar with panoramic Bangkok city lights at night", th: "รูฟท็อปบาร์วิวกรุงเทพกลางคืน" },
-  { en: "a luxury hotel suite with floor-to-ceiling windows overlooking the city at night", th: "ห้องโรงแรมหรูวิวเมืองกลางคืน" },
-  { en: "a private dining room at a fine-dining restaurant at night", th: "ห้องส่วนตัวร้านอาหารหรูกลางคืน" },
-  { en: "a high-society gala or cocktail event at night, elegant venue", th: "งานแกลาดินเนอร์กลางคืน" },
-  { en: "a penthouse living room at night with city lights through glass walls", th: "เพนต์เฮาส์วิวกรุงเทพกลางคืน" },
+  { en: "an exclusive rooftop bar with panoramic Bangkok city lights, sitting calmly with a drink on the table, elegant after-work lifestyle mood", th: "รูฟท็อปบาร์วิวกรุงเทพกลางคืน นั่งเงียบๆ กับเครื่องดื่มบนโต๊ะ" },
+  { en: "a luxury hotel lounge with floor-to-ceiling windows overlooking the city, relaxing after work with phone and handbag, composed refined atmosphere", th: "เลานจ์โรงแรมหรูวิวเมืองกลางคืน พักผ่อนหลังงานกับโทรศัพท์และกระเป๋า" },
+  { en: "a private dining room at a fine-dining restaurant, seated during an elegant dinner setting, warm polished social mood", th: "ห้องส่วนตัวร้านอาหารหรูกลางคืน นั่งดินเนอร์บรรยากาศอบอุ่น" },
+  { en: "a penthouse living room with city lights through glass walls, winding down while checking tomorrow's schedule, calm quiet-luxury evening mood", th: "เพนต์เฮาส์วิวกรุงเทพกลางคืน พักผ่อนพร้อมเช็กตารางวันพรุ่งนี้" },
 ];
 
 // Weekend / day-off scenes — relaxed luxury leisure
 const WEEKEND_MORNING_SCENES: Scene[] = [
-  { en: "a luxury hotel bed on a day off, sleeping in, soft light through sheer curtains", th: "นอนตื่นสายในโรงแรมหรูวันหยุด" },
-  { en: "a poolside lounger at a 5-star resort in the morning, calm and serene", th: "นอนเล่นริมสระโรงแรมยามเช้าวันหยุด" },
-  { en: "a trendy brunch cafe in Bangkok on a weekend morning", th: "บรันช์คาเฟ่สุดชิควันหยุด" },
-  { en: "a luxury spa reception area on a relaxed weekend morning", th: "สปาหรูยามเช้าวันหยุด" },
-  { en: "a penthouse kitchen making coffee on a lazy weekend morning", th: "ชงกาแฟในครัวเพนต์เฮาส์วันหยุด" },
+  { en: "a luxury hotel room in the morning, sitting near the window with coffee and a book, soft natural light, relaxed refined lifestyle mood", th: "ห้องโรงแรมหรูวันหยุดยามเช้า นั่งริมหน้าต่างกับกาแฟและหนังสือ" },
+  { en: "a poolside lounge at a 5-star resort, sitting under shade with sunglasses and a drink nearby, tasteful travel lifestyle atmosphere", th: "ริมสระว่ายน้ำรีสอร์ท 5 ดาวยามเช้า นั่งใต้ร่มพร้อมแว่นกันแดดและเครื่องดื่ม" },
+  { en: "a trendy brunch café in Bangkok, sitting with coffee and breakfast, cheerful polished weekend mood", th: "บรันช์คาเฟ่สุดชิคในกรุงเทพ นั่งจิบกาแฟกับอาหารเช้าวันหยุด" },
+  { en: "a penthouse kitchen making coffee in the morning, relaxed smart-casual styling, warm quiet-luxury domestic mood", th: "ครัวเพนต์เฮาส์ยามเช้าวันหยุด ชงกาแฟสบายๆ สไตล์ quiet luxury" },
 ];
 
 const WEEKEND_AFTERNOON_SCENES: Scene[] = [
-  { en: "a beach club with private cabana and ocean view in the afternoon", th: "บีชคลับส่วนตัวยามบ่ายวันหยุด" },
-  { en: "a luxury rooftop pool in the afternoon sun on a day off", th: "สระว่ายน้ำดาดฟ้าวันหยุดยามบ่าย" },
-  { en: "a high-end art gallery in Bangkok on a weekend afternoon", th: "แกลเลอรีหรูยามบ่ายวันหยุด" },
-  { en: "a private yacht deck in the afternoon, sea breeze", th: "ดาดฟ้าเรือยอชต์ยามบ่ายวันหยุด" },
-  { en: "a luxury wellness resort garden in the afternoon, serene and lush", th: "สวนรีสอร์ทหรูยามบ่ายวันหยุด" },
+  { en: "a beachfront café with ocean view, sitting in shaded seating with a drink and phone, relaxed upscale travel mood", th: "คาเฟ่ริมหาดวิวทะเลยามบ่าย นั่งร่มกับเครื่องดื่มและโทรศัพท์" },
+  { en: "a luxury rooftop pool lounge in afternoon light, seated in a shaded lounge area, tasteful resort lifestyle atmosphere", th: "เลานจ์สระว่ายน้ำดาดฟ้าหรูยามบ่าย นั่งพักในร่มบรรยากาศรีสอร์ท" },
+  { en: "a high-end art gallery in Bangkok, walking through exhibitions with calm thoughtful expression, refined cultural lifestyle mood", th: "แกลเลอรีหรูในกรุงเทพวันหยุดยามบ่าย เดินชมนิทรรศการด้วยสีหน้าสงบ" },
+  { en: "a luxury wellness resort garden, walking along a peaceful path after a spa appointment, calm healthy lifestyle mood", th: "สวนรีสอร์ทสปาหรูยามบ่ายวันหยุด เดินเล่นทางเดินสงบหลังทำสปา" },
 ];
 
 const WEEKEND_NIGHT_SCENES: Scene[] = [
-  { en: "an upscale Bangkok rooftop bar with friends on a weekend night", th: "รูฟท็อปบาร์กับเพื่อนคืนวันหยุด" },
-  { en: "a luxury hotel suite after a night out on the weekend, city lights outside", th: "ห้องโรงแรมหรูหลังออกไปเที่ยวคืนวันหยุด" },
-  { en: "a private villa terrace at night, ambient lighting and pool", th: "ระเบียงวิลล่าส่วนตัวกลางคืนวันหยุด" },
-  { en: "a fine-dining dinner with close friends on a weekend night", th: "ดินเนอร์กับเพื่อนร้านหรูคืนวันหยุด" },
-  { en: "a penthouse living room winding down on a weekend night", th: "พักผ่อนในเพนต์เฮาส์คืนวันหยุด" },
+  { en: "an upscale Bangkok rooftop bar with friends, seated at a table with city lights behind, warm elegant social mood", th: "รูฟท็อปบาร์กับเพื่อนคืนวันหยุด นั่งโต๊ะกับวิวไฟกรุงเทพ" },
+  { en: "a luxury hotel lounge after an evening event, sitting calmly with phone and handbag, refined city-night lifestyle atmosphere", th: "เลานจ์โรงแรมหรูหลังงานกลางคืนวันหยุด นั่งสงบกับโทรศัพท์และกระเป๋า" },
+  { en: "a private villa terrace at night, seated near ambient lighting and a pool in the background, calm tasteful holiday mood", th: "ระเบียงวิลล่าส่วนตัวกลางคืนวันหยุด นั่งริมสระในแสงไฟอบอุ่น" },
+  { en: "a fine-dining dinner with close friends, seated at an elegant table, warm polished weekend social atmosphere", th: "ดินเนอร์กับเพื่อนร้านหรูคืนวันหยุด นั่งโต๊ะบรรยากาศอบอุ่น" },
 ];
 
 function rand<T>(arr: T[]): T {
@@ -91,7 +99,7 @@ export function pickScene(bangkokHour: number): SceneSlot {
   const bangkokMMDD = bangkokNow.toISOString().slice(5, 10);
   const isWeekend = bangkokNow.getUTCDay() === 0 || bangkokNow.getUTCDay() === 6 || SPECIAL_DAYS.has(bangkokMMDD);
 
-  const isNight   = bangkokHour >= 20 || bangkokHour < 6;
+  const isNight   = bangkokHour >= 19 || bangkokHour < 6;
   const isMorning = bangkokHour < 12;
 
   const scenes = isWeekend
@@ -99,7 +107,8 @@ export function pickScene(bangkokHour: number): SceneSlot {
     : isNight   ? NIGHT_SCENES           : isMorning ? MORNING_SCENES           : AFTERNOON_SCENES;
 
   const scene = rand(scenes);
-  const prompt = BASE_PROMPT.replaceAll("[SCENE]", scene.en);
+  const shotType = rand(SHOT_TYPES);
+  const prompt = BASE_PROMPT.replaceAll("[SCENE]", scene.en).replace("[SHOT TYPE]", shotType);
 
   return { prompt, sceneContext: scene.th, outfit: scene.th };
 }
