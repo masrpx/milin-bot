@@ -8,9 +8,9 @@ import type { MilinMemory } from "./vault";
 let _openai: OpenAI | null = null;
 function getOpenAI() { return (_openai ??= new OpenAI()); }
 
-// Reference image at project root — committed to repo, read from filesystem.
-// No URL, no expiry. Add milin-image-1 to the repo and it's always available.
-const REFERENCE_IMAGE_PATH = path.join(process.cwd(), "milin-image-1.png");
+const REFERENCE_IMAGE_PATHS = [1, 2, 3, 4].map((n) =>
+  path.join(process.cwd(), `milin-image-${n}.png`)
+);
 
 function detectImageType(buf: Buffer): { contentType: string; ext: string } {
   // PNG: 89 50 4E 47
@@ -120,21 +120,22 @@ export async function generateMilinImage(
   const bangkokHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const { prompt, sceneContext, outfit } = prePickedScene ?? pickScene(bangkokHour);
 
-  // Read reference image from filesystem — no URL, no expiry
-  const baseBuffer = fs.readFileSync(REFERENCE_IMAGE_PATH);
-  const { contentType, ext } = detectImageType(baseBuffer);
-
-  if (!contentType.includes("png") && !contentType.includes("webp")) {
-    throw new Error(
-      `gpt-image-2 requires PNG or WebP. milin-image-1 detected as ${contentType}. Convert it to PNG and recommit.`
-    );
-  }
-
-  const baseFile = await toFile(baseBuffer, `reference.${ext}`, { type: contentType });
+  const referenceFiles = await Promise.all(
+    REFERENCE_IMAGE_PATHS.map(async (imgPath, i) => {
+      const buf = fs.readFileSync(imgPath);
+      const { contentType, ext } = detectImageType(buf);
+      if (!contentType.includes("png") && !contentType.includes("webp")) {
+        throw new Error(
+          `gpt-image-2 requires PNG or WebP. milin-image-${i + 1} detected as ${contentType}. Convert it to PNG and recommit.`
+        );
+      }
+      return toFile(buf, `reference-${i + 1}.${ext}`, { type: contentType });
+    })
+  );
 
   const result = await getOpenAI().images.edit({
     model: "gpt-image-2",
-    image: baseFile,
+    image: referenceFiles,
     prompt,
     size: "1024x1024",
   });
