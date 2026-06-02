@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { updateMilinMemory, appendRecentMessages, appendChatHistory, type MilinMemory } from "./vault";
+import { updateMilinMemory, appendRecentMessages, appendChatHistory, type MilinMemory, type RecentMessage } from "./vault";
 import { handleCapture } from "./handlers/capture";
 import { handleArticle } from "./handlers/article";
 import { handleConversation } from "./handlers/conversation";
@@ -32,8 +32,16 @@ const anthropic = new Anthropic();
 // Returns "calendar", "photo_request", or "chat". Falls back to "chat" on error.
 // ---------------------------------------------------------------------------
 
+function formatClassifierContext(msgs: RecentMessage[], count = 4): string {
+  return msgs
+    .slice(-count)
+    .map((m) => `${m.role === "user" ? "แม็ก" : "มิลิน"}: ${m.content.slice(0, 120)}`)
+    .join("\n");
+}
+
 export async function classifyMessage(
-  text: string
+  text: string,
+  context?: string
 ): Promise<"calendar" | "photo_request" | "chat"> {
   try {
     const res = await anthropic.messages.create({
@@ -42,10 +50,10 @@ export async function classifyMessage(
       messages: [
         {
           role: "user",
-          content: `Classify this Thai message into one category:
-- "calendar": scheduling, appointments, events, meetings, checking free time, dates, timetable
-- "photo_request": asking Milin to send a photo, show what she's doing, or share a picture
-- "chat": everything else
+          content: `${context ? `Recent conversation context:\n${context}\n\n` : ""}Classify this Thai message into one category:
+- "calendar": explicitly requesting to view, create, edit, or delete a calendar event or check availability
+- "photo_request": explicitly asking Milin to send a photo of herself or show what she looks like right now
+- "chat": everything else — including vague scheduling talk in non-calendar contexts, messages using pronouns like "นั่น"/"อัน"/"มัน" to reference something already shown, or general discussion
 
 Message: "${text}"
 
@@ -78,7 +86,8 @@ export async function routeMessage(
   memory: MilinMemory,
   // Injectable for testing — defaults to the real Haiku classifier in production
   classifier: (
-    text: string
+    text: string,
+    context?: string
   ) => Promise<"calendar" | "photo_request" | "chat"> = classifyMessage
 ): Promise<string> {
   const isUrl = /https?:\/\/[^\s]+/.test(text);
@@ -160,7 +169,10 @@ export async function routeMessage(
 
   // Priority 6: Haiku pre-classifier decides calendar / photo_request / chat.
   // Covers natural language that doesn't match any fixed keyword.
-  const category = await classifier(text);
+  const classifierContext = memory.recentMessages.length
+    ? formatClassifierContext(memory.recentMessages)
+    : undefined;
+  const category = await classifier(text, classifierContext);
   if (category === "calendar") return finish(await handleCalendar(text, memory));
 
   // Priority 7: photo request — handler sends image+text directly via replyToken,
