@@ -24,7 +24,7 @@ import {
   isPendingTodoClassify,
 } from "./handlers/todo-classify";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ maxRetries: 4 });
 
 // ---------------------------------------------------------------------------
 // Haiku pre-classifier — replaces keyword-based calendar detection.

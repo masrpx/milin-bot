@@ -16,7 +16,7 @@ import {
 import { parseCalendarRequest, formatTime, formatDateLabel } from "./calendar";
 import { createEvent } from "../calendar";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 
 // ---------------------------------------------------------------------------
 // Pending state helper

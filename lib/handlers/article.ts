@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { fetchArticleText } from "../fetch-article";
 import { saveToKnowledgeQueue, type KnowledgeItem } from "../vault";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 
 export async function handleArticle(
   input: string,

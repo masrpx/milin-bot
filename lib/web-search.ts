@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { updateMilinMemory, type MilinMemory, type KnowledgeItem } from "./vault";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 
 interface TavilyResult {
   title: string;

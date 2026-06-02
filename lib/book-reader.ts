@@ -10,7 +10,7 @@ import {
   type ReadingProgress,
 } from "./vault";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 export interface BookReadResult {

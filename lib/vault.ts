@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import Anthropic from "@anthropic-ai/sdk";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ maxRetries: 4 });
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 const OWNER = process.env.GITHUB_OWNER!;

@@ -8,7 +8,7 @@ import {
 } from "../calendar";
 import { type MilinMemory, type PendingAction, updateMilinMemory } from "../vault";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 
 // ---------------------------------------------------------------------------
 // Color theme — Max's personal Google Calendar color system

@@ -7,7 +7,7 @@ import {
   type MemoryExtract,
 } from "../milin-prompt";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 
 // Internal — not used for routing, only to decide if vault search is worth doing
 const NEEDS_VAULT = [

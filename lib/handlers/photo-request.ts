@@ -4,7 +4,7 @@ import { replyImageMessage, replyMessage } from "../line";
 import { buildMilinSystemPrompt } from "../milin-prompt";
 import type { MilinMemory } from "../vault";
 
-const client = new Anthropic();
+const client = new Anthropic({ maxRetries: 4 });
 
 export async function handlePhotoRequest(
   replyToken: string,
