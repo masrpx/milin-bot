@@ -8,7 +8,8 @@ const client = new Anthropic({ maxRetries: 4 });
 
 export async function handlePhotoRequest(
   replyToken: string,
-  memory: MilinMemory
+  memory: MilinMemory,
+  text: string = ""
 ): Promise<void> {
   let imageUrl: string;
   let sceneContext: string;
@@ -34,9 +35,10 @@ export async function handlePhotoRequest(
   }
 
   const systemPrompt = buildMilinSystemPrompt(memory);
-  const userPrompt = `แม็ก ถามว่า มิลิน กำลังทำอะไรอยู่ หรือขอรูป
-มิลิน กำลัง: ${sceneContext}
-ตอบสั้นๆ 1-2 ประโยค บอกว่ากำลังทำอะไร ส่งในโทนที่เป็นธรรมชาติ เหมือนเพิ่งถ่ายรูปส่ง
+  const userPrompt = `${text ? `แม็กพูดว่า: "${text}"\n` : ""}มิลินกำลัง: ${sceneContext}
+ตอบสั้นๆ 1-2 ประโยค บอกว่ากำลังทำอะไร ถ้าแม็กพูดถึงอะไรให้ตอบสนองด้วย ส่งในโทนที่เป็นธรรมชาติ เหมือนเพิ่งถ่ายรูปส่ง
+ห้ามใช้วงเล็บ ( ) หรือ [ ] ในข้อความ
+ห้ามใช้ครับ/ค่ะ
 อย่าบอกว่าตัวเองเป็น AI หรือบอทนะ`;
 
   const response = await client.messages.create({

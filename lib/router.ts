@@ -52,8 +52,8 @@ export async function classifyMessage(
           role: "user",
           content: `${context ? `Recent conversation context:\n${context}\n\n` : ""}Classify this Thai message into one category:
 - "calendar": explicitly requesting to view, create, edit, or delete a calendar event or check availability
-- "photo_request": explicitly asking Milin to send a photo of herself or show what she looks like right now
-- "chat": everything else — including vague scheduling talk in non-calendar contexts, messages using pronouns like "นั่น"/"อัน"/"มัน" to reference something already shown, or general discussion
+- "photo_request": explicitly asking Milin to send a NEW photo of herself right now (e.g. "ขอรูปหน่อย", "ส่งรูปมาสิ", "อยู่ไหน ส่งรูปมา")
+- "chat": everything else — answering a question Milin asked (e.g. telling her his outfit, location, or activities), complimenting or reacting to a photo already sent ("รูปสวย", "น่ารักจัง"), vague scheduling talk, pronouns like "นั่น"/"อัน"/"มัน" referencing something shown, or general discussion. If context shows Milin recently asked a question and this message is Max's answer, it is chat.
 
 Message: "${text}"
 
@@ -66,8 +66,7 @@ Reply with ONLY: calendar OR photo_request OR chat`,
         ? res.content[0].text.trim().toLowerCase()
         : "chat";
     if (result.includes("calendar")) return "calendar";
-    if (result.includes("photo_request") || result.includes("photo"))
-      return "photo_request";
+    if (result.includes("photo_request")) return "photo_request";
     return "chat";
   } catch {
     return "chat";
@@ -178,7 +177,8 @@ export async function routeMessage(
   // Priority 7: photo request — handler sends image+text directly via replyToken,
   // returns "" so the caller knows not to send another reply.
   if (category === "photo_request") {
-    await handlePhotoRequest(replyToken, memory);
+    await handlePhotoRequest(replyToken, memory, text);
+    appendRecentMessages(text, "(ส่งรูป)").catch(() => {});
     appendChatHistory(text, "(ส่งรูป)").catch(() => {});
     return "";
   }
