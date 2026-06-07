@@ -16,6 +16,7 @@
     { "path": "/api/cron/milin-ping10", "schedule": "0 10 * * *"    },
     { "path": "/api/cron/milin-ping11", "schedule": "0 11 * * *"    },
     { "path": "/api/cron/milin-ping12", "schedule": "0 12 * * *"    },
-    { "path": "/api/cron/milin-ping13", "schedule": "0 13 * * *"    }
+    { "path": "/api/cron/milin-ping13", "schedule": "0 13 * * *"    },
+    { "path": "/api/cron/portfolio-update", "schedule": "0 13 * * 0" }
   ]
 }

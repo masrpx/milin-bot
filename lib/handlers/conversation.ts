@@ -6,6 +6,7 @@ import {
   fetchBangkokWeather,
   type MemoryExtract,
 } from "../milin-prompt";
+import { fetchPortfolio } from "../portfolio";
 
 const client = new Anthropic({ maxRetries: 4 });
 
@@ -15,15 +16,21 @@ const NEEDS_VAULT = [
   "หา", "ค้นหา", "สรุป", "บอก", "อธิบาย", "แนะนำ", "มีไหม", "ช่วย", "เรื่อง",
 ];
 
+const NEEDS_PORTFOLIO = [
+  "พอร์ต", "หุ้น", "ลงทุน", "dca", "portfolio", "rebalance", "weight", "asset",
+];
+
 export async function handleConversation(
   text: string,
   memory: MilinMemory
 ): Promise<string> {
   const shouldSearchVault = NEEDS_VAULT.some((t) => text.includes(t));
+  const shouldFetchPortfolio = NEEDS_PORTFOLIO.some((t) => text.toLowerCase().includes(t));
 
-  const [vaultResults, weather] = await Promise.all([
+  const [vaultResults, weather, portfolioRaw] = await Promise.all([
     shouldSearchVault ? searchVault(text) : Promise.resolve([]),
     fetchBangkokWeather(),
+    shouldFetchPortfolio ? fetchPortfolio() : Promise.resolve(undefined),
   ]);
   const vaultContext = vaultResults.length
     ? vaultResults.join("\n\n---\n\n")
@@ -38,7 +45,7 @@ export async function handleConversation(
     ? `\n\n## บทสนทนาล่าสุด\n${recentConvos}`
     : "";
 
-  const systemPrompt = buildMilinSystemPrompt(memory, vaultContext, weather) + contextNote;
+  const systemPrompt = buildMilinSystemPrompt(memory, vaultContext, weather, portfolioRaw) + contextNote;
 
   // Build message history: last stored turns + current user message.
   // History is always valid alternating pairs (stored as user+assistant), so no sanitization needed.

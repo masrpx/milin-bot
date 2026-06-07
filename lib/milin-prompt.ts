@@ -35,6 +35,7 @@ export function buildMilinSystemPrompt(
   memory: MilinMemory,
   vaultContext?: string,
   weatherContext?: string,
+  portfolioContext?: string,
 ): string {
   const aboutMaxLines = memory.aboutMax.length
     ? memory.aboutMax.join("\n")
@@ -114,6 +115,9 @@ ${memory.currentMood}
 
 ## Vault Content ที่เกี่ยวข้อง
 ${vaultContext || "(ไม่มีข้อมูลเพิ่มเติม)"}
+
+## พอร์ตการลงทุนของแม็ก (ข้อมูลล่าสุด)
+${portfolioContext || "(ไม่ได้ถามเรื่องพอร์ต)"}
 
 ## ข้อความที่ มิลิน เพิ่งส่งหา แม็ก
 ${(() => {
