@@ -48,8 +48,8 @@ export async function handlePhotoRequest(
     messages: [{ role: "user", content: userPrompt }],
   });
 
-  const text =
+  const caption =
     response.content[0].type === "text" ? response.content[0].text : sceneContext;
 
-  await replyImageMessage(replyToken, imageUrl, text);
+  await replyImageMessage(replyToken, imageUrl, caption);
 }

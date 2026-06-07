@@ -1,4 +1,4 @@
-import { list, download } from "@vercel/blob";
+import { list } from "@vercel/blob";
 
 const PORTFOLIO_PREFIX = "portfolio/";
 // Bound DCA log entries to keep the JSON prompt-safe
@@ -15,7 +15,11 @@ export async function fetchPortfolio(): Promise<string | undefined> {
     const { blobs } = await list({ prefix: PORTFOLIO_PREFIX, token });
     if (!blobs.length) return undefined;
 
-    const res = await download(blobs[0].url, { token });
+    const res = await fetch(blobs[0].url, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return undefined;
     const raw = await res.text();
     const parsed = JSON.parse(raw);
 

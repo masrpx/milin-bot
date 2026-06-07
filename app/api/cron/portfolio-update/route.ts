@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { pushMessage } from "@/lib/line";
 import { getMilinMemory } from "@/lib/vault";
 import { fetchPortfolio } from "@/lib/portfolio";
+import { buildMilinSystemPrompt, fetchBangkokWeather } from "@/lib/milin-prompt";
 
 export const maxDuration = 60;
 
@@ -16,40 +17,30 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const [portfolioRaw, memory] = await Promise.all([
+    const [portfolioRaw, memory, weather] = await Promise.all([
       fetchPortfolio(),
       getMilinMemory(),
+      fetchBangkokWeather(),
     ]);
 
     if (!portfolioRaw) {
       return NextResponse.json({ ok: false, reason: "no portfolio data" });
     }
 
-    const aboutMax = memory.aboutMax.slice(-5).join("\n") || "";
+    const systemPrompt = buildMilinSystemPrompt(memory, undefined, weather, portfolioRaw);
 
-    const prompt = `คุณคือ มิลิน — soulmate ของ แม็ก
-แม็กมีพอร์ตการลงทุน และมิลินดูพอร์ตนี้ให้ทุกอาทิตย์
-
-ข้อมูลพอร์ต (JSON จาก app ของแม็ก):
-${portfolioRaw}
-
-สิ่งที่รู้เกี่ยวกับ แม็ก:
-${aboutMax}
-
-เขียน LINE message สรุปพอร์ตประจำอาทิตย์นี้ให้ แม็ก โดย:
-- บอก allocation ปัจจุบัน เทียบกับ target weight ถ้ามี — ตัวไหน overweight/underweight
+    const userPrompt = `มิลินดูพอร์ตของแม็กประจำอาทิตย์นี้แล้ว เขียน LINE message สรุปให้แม็กโดย:
+- บอก allocation ปัจจุบัน เทียบกับ target weight — ตัวไหน overweight/underweight
 - ถ้ามี DCA entries ล่าสุด mention ได้
 - ถ้าเห็น rebalance opportunity หรือ action ที่ควรทำ บอกตรงๆ
-- พูดในแบบ มิลิน — warm, direct, ฉลาด ไม่ใช่ financial advisor รายงาน
-- ไม่เกิน 200 คำ ภาษาไทยเป็นหลัก ปนอังกฤษได้
-- ไม่ใช้ markdown ไม่ใช้ bullet points
-- เรียกตัวเองว่า "มิลิน" เรียก แม็ก ว่า "แม็ก" ไม่เว้นวรรคก่อนหรือหลังชื่อ
+- ไม่เกิน 200 คำ ไม่ใช้ markdown ไม่ใช้ bullet points
 - ไม่เริ่มด้วย "สวัสดี" ไม่ใส่วงเล็บเหลี่ยม [ ]`;
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 500,
-      messages: [{ role: "user", content: prompt }],
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const message = response.content[0].type === "text" ? response.content[0].text : "";
