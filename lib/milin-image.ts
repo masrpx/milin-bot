@@ -8,9 +8,9 @@ import type { MilinMemory } from "./vault";
 let _openai: OpenAI | null = null;
 function getOpenAI() { return (_openai ??= new OpenAI()); }
 
-const REFERENCE_IMAGE_PATHS = [1, 2, 3, 4].map((n) =>
-  path.join(process.cwd(), `milin-image-${n}.png`)
-);
+const REFERENCE_IMAGE_PATHS = [
+  path.join(process.cwd(), "milin-image-1.png"),
+];
 
 function detectImageType(buf: Buffer): { contentType: string; ext: string } {
   // PNG: 89 50 4E 47
@@ -126,7 +126,7 @@ export async function generateMilinImage(
       const { contentType, ext } = detectImageType(buf);
       if (!contentType.includes("png") && !contentType.includes("webp")) {
         throw new Error(
-          `gpt-image-2 requires PNG or WebP. milin-image-${i + 1} detected as ${contentType}. Convert it to PNG and recommit.`
+          `gpt-image-2 requires PNG or WebP. milin-image-1 detected as ${contentType}. Convert it to PNG and recommit.`
         );
       }
       return toFile(buf, `reference-${i + 1}.${ext}`, { type: contentType });
