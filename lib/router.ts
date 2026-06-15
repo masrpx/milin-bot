@@ -23,6 +23,7 @@ import {
   handleInboxQuery,
   isPendingTodoClassify,
 } from "./handlers/todo-classify";
+import { handleFinanceQuery, handleTaxEntry } from "./handlers/finance-query";
 
 const anthropic = new Anthropic({ maxRetries: 4 });
 
@@ -97,6 +98,10 @@ export async function routeMessage(
   const isReschedule = /^reschedule\s/i.test(text.trim());
   const isNVDN = /^(milin\s+)?nvdn(\s|$)/i.test(text.trim());
   const isInboxQuery = /\binbox\b/i.test(text);
+  const isTaxEntry = /^ภาษี\s*:/.test(text.trim());
+  // Specific finance-report words only — avoid hijacking casual money talk
+  // (e.g. "ไม่มีเงินเลย"). "เงิน" alone is intentionally excluded.
+  const isFinanceQuery = /(การเงิน|สรุปเงิน|รายจ่าย|รายรับ|ใช้จ่าย|ภาษี)/.test(text);
 
   // All handlers return a reply string. We save every exchange to recentMessages
   // here (fire-and-forget) so memory is complete regardless of which handler ran.
@@ -151,6 +156,13 @@ export async function routeMessage(
 
   // Priority 3.3: NDN commands + reschedule
   if (isNDN || isReschedule) return finish(await handleNDN(text, memory));
+
+  // Priority 3.4: "ภาษี: ..." captures a manual tax-deduction figure
+  if (isTaxEntry) return finish(await handleTaxEntry(text.replace(/^ภาษี\s*:\s*/, "").trim()));
+
+  // Priority 3.5: finance report query ("รายจ่ายเดือนนี้", "สรุปการเงิน", "ภาษีปีนี้")
+  // — before the long-text/Haiku stages so it doesn't route to chat.
+  if (isFinanceQuery) return finish(await handleFinanceQuery(text));
 
   // Priority 4: explicit capture prefix — must be before long-text check so
   // long "จด:" notes don't fall into the article handler

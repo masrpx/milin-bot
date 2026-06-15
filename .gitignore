@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# personal finance — raw statements & extracted text must never be committed
+/statements/
+*.pdf
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

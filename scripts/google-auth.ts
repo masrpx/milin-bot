@@ -21,7 +21,11 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
 }
 
 const REDIRECT_URI = "http://localhost:3333/callback";
-const SCOPE = "https://www.googleapis.com/auth/calendar";
+// Calendar (bot) + Gmail read-only (local statement fetch, scripts/finance-fetch-gmail.ts)
+const SCOPE = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/gmail.readonly",
+].join(" ");
 
 const authUrl =
   "https://accounts.google.com/o/oauth2/v2/auth?" +

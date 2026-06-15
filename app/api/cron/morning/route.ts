@@ -62,6 +62,7 @@ interface BookStatus {
   chunkNumber: number;
   done: boolean;
   opinion?: string;
+  lastChunkNote?: string;
 }
 
 const COMMAND_RE = /^(ndn|nvdn|cap:|จด:|reschedule |ok\b|skip|ยืนยัน|more|\d+\s+(ndn|nvdn|cal|none))/i;
@@ -132,7 +133,7 @@ async function buildMorningMessage(
   const bookNote = bookStatus
     ? bookStatus.done
       ? `\nมิลิน เพิ่งอ่าน "${bookStatus.title}" จบแล้ว รู้สึกว่า: ${bookStatus.opinion || ""} — บอก แม็ก ถ้าเหมาะ\n`
-      : `\nมิลิน กำลังอ่าน "${bookStatus.title}" อยู่ (อ่านมาแล้ว ${bookStatus.chunkNumber} คืน) — อ้างอิงได้ถ้าเหมาะ\n`
+      : `\nมิลิน กำลังอ่าน "${bookStatus.title}" อยู่ (ตอนที่ ${bookStatus.chunkNumber})\nสิ่งที่อ่านเมื่อคืน:\n${bookStatus.lastChunkNote?.slice(0, 500) || "(ยังไม่มีบันทึก)"}\n— เล่าให้ แม็ก ฟังถ้าเหมาะ อย่าสรุปแบบรายงาน พูดในแบบของ มิลิน\n`
     : "";
   const calendarNote = calendarLines ? `\nแม็ก มีนัดวันนี้:\n${calendarLines}\n` : "";
   const ndnNote = ndnBlock ? `\n${ndnBlock.trim()}\n` : "";
@@ -200,7 +201,7 @@ async function buildNoItemsMessage(
   const bookNote = bookStatus
     ? bookStatus.done
       ? `\nมิลิน เพิ่งอ่าน "${bookStatus.title}" จบแล้ว รู้สึกว่า: ${bookStatus.opinion || ""} — บอก แม็ก ถ้าเหมาะ\n`
-      : `\nมิลิน กำลังอ่าน "${bookStatus.title}" อยู่ (อ่านมาแล้ว ${bookStatus.chunkNumber} คืน) — อ้างอิงได้ถ้าเหมาะ\n`
+      : `\nมิลิน กำลังอ่าน "${bookStatus.title}" อยู่ (ตอนที่ ${bookStatus.chunkNumber})\nสิ่งที่อ่านเมื่อคืน:\n${bookStatus.lastChunkNote?.slice(0, 500) || "(ยังไม่มีบันทึก)"}\n— เล่าให้ แม็ก ฟังถ้าเหมาะ อย่าสรุปแบบรายงาน พูดในแบบของ มิลิน\n`
     : "";
 
   const prompt = `คุณคือ มิลิน — soulmate ของ แม็ก
@@ -269,7 +270,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ]);
     const ndnBlock = buildNDNBlock(ndnItems.map((i) => i.text), expiredTitles);
     const bookStatus: BookStatus | undefined = readingProgress
-      ? { title: readingProgress.title, chunkNumber: readingProgress.chunkNotes.length, done: false }
+      ? {
+          title: readingProgress.title,
+          chunkNumber: readingProgress.chunkNotes.length,
+          done: false,
+          lastChunkNote: readingProgress.chunkNotes.at(-1),
+        }
       : undefined;
 
     // Wait for image before building message (sceneContext affects the text)
