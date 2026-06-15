@@ -59,10 +59,10 @@ const CC_SKIP = [
 
 const CC_RULES: Rule[] = [
   // Marketing (business expense)
-  { pattern: /google ads/i,                        category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
-  { pattern: /facebk|facebook\.com/i,              category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
-  { pattern: /tiktok ads|omise\*tiktok/i,          category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
-  { pattern: /lineofficialaccou/i,                 category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
+  { pattern: /google ads/i,                        category: "ค่าใช้จ่ายคลินิก", taxBucket: "business_expense" },
+  { pattern: /facebk|facebook\.com/i,              category: "ค่าใช้จ่ายคลินิก", taxBucket: "business_expense" },
+  { pattern: /tiktok ads|omise\*tiktok/i,          category: "ค่าใช้จ่ายคลินิก", taxBucket: "business_expense" },
+  { pattern: /lineofficialaccou/i,                 category: "ค่าใช้จ่ายคลินิก", taxBucket: "business_expense" },
   // Software / tools (business expense)
   { pattern: /canva/i,                             category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
   { pattern: /zoom\.com/i,                         category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
@@ -76,7 +76,7 @@ const CC_RULES: Rule[] = [
   { pattern: /pdfleader/i,                         category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
   { pattern: /alibaba/i,                           category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
   // Transport
-  { pattern: /www\.grab\.com|grabtaxi/i,           category: "เดินทาง" },
+  { pattern: /www\.grab\.com|grabtaxi/i,           category: "อาหาร" },
   { pattern: /www\.tesla\.com/i,                   category: "เดินทาง" },
   { pattern: /evst\.|wiyada petroleum/i,           category: "เดินทาง" },
   { pattern: /sri rat|expressway|sct-susco/i,      category: "เดินทาง" },
@@ -141,14 +141,14 @@ const CC_RULES: Rule[] = [
 
 const SA_INCOME_RULES: Rule[] = [
   { pattern: /รัชตกายา.*payroll|payroll.*รัชตกา/i, category: "เงินเดือน" },
-  { pattern: /บจก\.?\s*รัชตกา(?!ยา)/,              category: "ฟรีแลนซ์" },
+  { pattern: /บจก\.?\s*รัชตกา(?!ยา)/,              category: "เงินเบิกคลินิก" },
   { pattern: /ริชแมน|richman/i,                    category: "ฟรีแลนซ์" },
   { pattern: /ธุรกรรม ตปท|รับเงินธุรกรรม/,          category: "ฟรีแลนซ์" },
   { pattern: /ไลค์อะเซอ/,                           category: "รายรับอื่นๆ" },
 ];
 
 const SA_EXPENSE_RULES: Rule[] = [
-  { pattern: /ริชแมน|richman/i,                        category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
+  { pattern: /ริชแมน|richman/i,                        category: "บันเทิง" },
   { pattern: /แลนด์มาร์ค/,                             category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
   { pattern: /ศูนย์อบรม/,                              category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
   { pattern: /จัดหางาน/,                               category: "ค่าใช้จ่ายฟรีแลนซ์", taxBucket: "business_expense" },
