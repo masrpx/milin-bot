@@ -222,6 +222,59 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://milin-bot.vercel.app/api/cr
 
 ---
 
+## Finance Ingestion (local, periodic)
+
+Statements live in gitignored `./statements/`. Two-step flow — always run both together:
+
+```bash
+# Step 1: parse all .txt files → statements/ingest-draft.json
+npx tsx scripts/finance-parse-statements.ts
+
+# Step 2a: dry-run (shows counts + totals, nothing written)
+npx tsx scripts/finance-ingest.ts
+
+# Step 2b: merge new transactions into vault
+npx tsx scripts/finance-ingest.ts --commit
+
+# Step 2c: re-categorize — replace ALL vault transactions with draft
+npx tsx scripts/finance-ingest.ts --commit --replace
+```
+
+### Statement file types
+
+| File prefix | Type | Format notes |
+|---|---|---|
+| `KBGC_*_YYMMDD.txt` | CC statement | Two cards (6515 + 6458); each page duplicated; pages 5–6 are filler. See `statements/FORMAT_NOTES.md` |
+| `STM_SA*_*.txt` | Savings account | Balance-tracked; pages not duplicated |
+
+Use `scripts/finance-fetch-gmail.ts` to pull new PDFs from Gmail, then `scripts/finance-extract.ts` to convert PDF → .txt.
+
+### Re-categorizing
+
+Edit `CC_RULES` / `SA_INCOME_RULES` / `SA_EXPENSE_RULES` in `scripts/finance-parse-statements.ts`, then re-run parse + `--commit --replace`.
+
+### Categories in use (Thai)
+
+| Category | Direction | Notes |
+|---|---|---|
+| `ค่าใช้จ่ายคลินิก` | expense | Clinic marketing (Google Ads, FB, TikTok, LINE OA) |
+| `ค่าใช้จ่ายฟรีแลนซ์` | expense | Freelance tools (Canva, Zoom, Claude, OpenAI, Adobe…) |
+| `เงินเดือน` | income | Monthly salary from รัชตกายา 24k/mo |
+| `เงินเบิกคลินิก` | income | Clinic income from บจก.รัชตกา |
+| `ฟรีแลนซ์` | income | Richman Entertainment + foreign wire |
+| `รายรับอื่นๆ` | income | Commission (ไลค์อะเซอ), QR, Amway |
+| `ประกันสังคม` | expense | SSO employer contributions (ม.33); taxBucket: social_security |
+| `ลงทุน` | expense | SSF mutual fund 5k/mo; taxBucket: ssf |
+| `บริจาค` | expense | โสสะ 500/mo; taxBucket: donation |
+| `ประกัน` | expense | Allianz annual + เมืองไทย monthly; taxBucket: life_insurance |
+| `ผ่อนชำระ` | expense | TISCO loan 28,493/mo |
+
+### Dashboard
+
+`https://milin-bot.vercel.app/finance?token=<FINANCE_DASHBOARD_TOKEN>` — reads vault on every request (no deploy needed after re-ingest).
+
+---
+
 ## Backlog
 
 - [ ] **Staging env** — no preview environment

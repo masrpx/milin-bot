@@ -4,6 +4,7 @@ import {
   dedupeTransactions,
   categorize,
   summarize,
+  cashInHand,
   type Transaction,
   type MerchantMap,
 } from "@/lib/finance";
@@ -118,6 +119,26 @@ describe("summarize", () => {
 });
 
 // ---------------------------------------------------------------------------
+// cashInHand
+// ---------------------------------------------------------------------------
+
+describe("cashInHand", () => {
+  it("sums account balances and reports the oldest snapshot date", () => {
+    const result = cashInHand([
+      { account: "sa-0191", date: "2026-06-10", balance: 50_000 },
+      { account: "sa-6884", date: "2026-06-08", balance: 12_345 },
+    ]);
+    expect(result.total).toBe(62_345);
+    expect(result.asOf).toBe("2026-06-08");
+    expect(result.accounts).toHaveLength(2);
+  });
+
+  it("returns zero total and empty asOf when there are no accounts", () => {
+    expect(cashInHand([])).toEqual({ total: 0, asOf: "", accounts: [] });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tax engine
 // ---------------------------------------------------------------------------
 
@@ -169,6 +190,18 @@ describe("estimateTax", () => {
     expect(rmfRoom.cap).toBe(300_000); // 30% of 1M, under the 500k statutory cap
     expect(rmfRoom.used).toBe(100_000);
     expect(rmfRoom.remaining).toBe(200_000);
+  });
+
+  it("caps social security deduction at ฿9,000 for tax years before 2026", () => {
+    const config = { ...defaultTaxConfig(), taxYear: 2025, manualDeductions: { social_security: 12_000 } };
+    const est = estimateTax(salaryMillion, config);
+    expect(est.deductions).toBe(9_000);
+  });
+
+  it("caps social security deduction at ฿10,500 from tax year 2026 (SSO wage ceiling raised to ฿17,500)", () => {
+    const config = { ...defaultTaxConfig(), taxYear: 2026, manualDeductions: { social_security: 12_000 } };
+    const est = estimateTax(salaryMillion, config);
+    expect(est.deductions).toBe(10_500);
   });
 });
 

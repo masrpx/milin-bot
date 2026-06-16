@@ -3,9 +3,11 @@ import {
   getTransactions,
   getMerchantMap,
   getTaxConfig,
+  getBalances,
   listMonths,
   filterByMonth,
   summarize,
+  cashInHand,
   formatTHB,
   type Transaction,
 } from "@/lib/finance";
@@ -25,11 +27,9 @@ export default async function FinancePage({ searchParams }: PageProps) {
   const secret = process.env.FINANCE_DASHBOARD_TOKEN;
   if (!secret || token !== secret) notFound();
 
-  const [{ items: transactions }, { map: merchantMap }, { config: taxConfig }] = await Promise.all([
-    getTransactions(),
-    getMerchantMap(),
-    getTaxConfig(),
-  ]);
+  const [{ items: transactions }, { map: merchantMap }, { config: taxConfig }, { items: balances }] =
+    await Promise.all([getTransactions(), getMerchantMap(), getTaxConfig(), getBalances()]);
+  const cash = cashInHand(balances);
 
   const months = listMonths(transactions);
   const month = monthParam && months.includes(monthParam) ? monthParam : months[0];
@@ -60,6 +60,8 @@ export default async function FinancePage({ searchParams }: PageProps) {
             <Stat label="รายจ่าย" value={summary.expense} tone="text-rose-600" />
             <Stat label="คงเหลือ" value={summary.net} tone={summary.net >= 0 ? "text-emerald-600" : "text-rose-600"} />
           </section>
+
+          {cash.accounts.length > 0 && <CashPanel cash={cash} />}
 
           <CategoryBars title="รายจ่ายตามหมวด" data={summary.expenseByCategory} />
           {Object.keys(summary.incomeByCategory).length > 0 && (
@@ -140,6 +142,26 @@ function CategoryBars({
               />
             </div>
             <div className="w-24 shrink-0 text-right text-sm tabular-nums">{formatTHB(value)}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CashPanel({ cash }: { cash: ReturnType<typeof cashInHand> }) {
+  return (
+    <section className="mt-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-medium text-zinc-500">เงินสดในมือ</h2>
+        <span className="text-xs text-zinc-400">ข้อมูล ณ {cash.asOf}</span>
+      </div>
+      <div className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatTHB(cash.total)}</div>
+      <div className="mt-2 space-y-1 text-sm">
+        {cash.accounts.map((b) => (
+          <div key={b.account} className="flex justify-between text-zinc-500">
+            <span>{b.account}</span>
+            <span className="tabular-nums">{formatTHB(b.balance)}</span>
           </div>
         ))}
       </div>

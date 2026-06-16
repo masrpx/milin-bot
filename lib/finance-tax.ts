@@ -33,9 +33,8 @@ const ALLOWANCE = {
 const EXPENSE_DEDUCTION_RATE = 0.5;
 const EXPENSE_DEDUCTION_CAP = 100_000;
 
-/** Statutory caps for the deduction buckets we track. */
+/** Statutory caps for the deduction buckets we track. (social_security is year-dependent, see below.) */
 const DEDUCTION_CAPS = {
-  social_security: 9_000,
   life_insurance: 100_000, // combined life + self health
   health_insurance: 25_000, // self health sub-cap (within the 100k above)
   mortgage_interest: 100_000,
@@ -43,6 +42,17 @@ const DEDUCTION_CAPS = {
   ssf: 200_000,
   thai_esg: 300_000,
 };
+
+/**
+ * Social security deduction tracks the SSO contribution ceiling, which is just
+ * 12x the statutory max monthly employee contribution (5% of the wage base cap).
+ * The wage base cap rose from ฿15,000 to ฿17,500 effective 1 Jan 2026 (Royal
+ * Gazette, 12 Dec 2025) — max monthly contribution ฿750 → ฿875, so the annual
+ * deduction ceiling is ฿9,000 for tax years through 2025 and ฿10,500 from 2026.
+ */
+function socialSecurityCap(taxYear: number): number {
+  return taxYear >= 2026 ? 10_500 : 9_000;
+}
 
 /** RMF/SSF/etc. are each also limited to this share of assessable income. */
 const RETIREMENT_INCOME_RATE = 0.3;
@@ -139,7 +149,7 @@ export function estimateTax(transactions: Transaction[], config: TaxConfig): Tax
     config.parentsSupported * ALLOWANCE.perParent;
 
   const buckets = sumDeductionBuckets(transactions, config.manualDeductions);
-  const deductions = applyDeductionCaps(buckets, assessable);
+  const deductions = applyDeductionCaps(buckets, assessable, config.taxYear);
 
   const taxableIncome = Math.max(0, assessable - expenseDeduction - allowances - deductions);
   const estimatedTax = progressiveTax(taxableIncome);
@@ -157,11 +167,12 @@ export function estimateTax(transactions: Transaction[], config: TaxConfig): Tax
 function applyDeductionCaps(
   buckets: Partial<Record<TaxBucket, number>>,
   assessableIncome: number,
+  taxYear: number,
 ): number {
   const capped = (bucket: keyof typeof DEDUCTION_CAPS, extraLimit = Infinity) =>
     Math.min(buckets[bucket] ?? 0, DEDUCTION_CAPS[bucket], extraLimit);
 
-  const socialSecurity = capped("social_security");
+  const socialSecurity = Math.min(buckets.social_security ?? 0, socialSecurityCap(taxYear));
   const mortgage = capped("mortgage_interest");
 
   // Life + self health share a 100k ceiling; self health also ≤ 25k on its own.

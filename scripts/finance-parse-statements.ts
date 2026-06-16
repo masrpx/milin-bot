@@ -302,11 +302,18 @@ function parseCCFile(filePath: string): Transaction[] {
 // Savings account parser
 // ---------------------------------------------------------------------------
 
-function parseSAFile(filePath: string, accountId: string): Transaction[] {
+interface SAParseResult {
+  transactions: Transaction[];
+  /** Running balance as of the last parsed statement line — i.e. cash on hand for this account. */
+  lastBalance: { date: string; balance: number } | null;
+}
+
+function parseSAFile(filePath: string, accountId: string): SAParseResult {
   const content = fs.readFileSync(filePath, "utf-8");
   const lines = content.split("\n");
   const transactions: Transaction[] = [];
   let prevBalance: number | null = null;
+  let lastBalance: { date: string; balance: number } | null = null;
 
   let i = 0;
   while (i < lines.length) {
@@ -337,6 +344,7 @@ function parseSAFile(filePath: string, accountId: string): Transaction[] {
       continue;
     }
     const balanceAfter = parseAmount(balMatch[1]);
+    lastBalance = { date: saDate(dateStr), balance: balanceAfter };
 
     // Collect description from this line and any continuation lines
     const channelAndBalance = afterPrefix.slice(0, afterPrefix.indexOf(balMatch[1]) + balMatch[1].length);
@@ -407,7 +415,7 @@ function parseSAFile(filePath: string, accountId: string): Transaction[] {
     transactions.push(tx);
   }
 
-  return transactions;
+  return { transactions, lastBalance };
 }
 
 // ---------------------------------------------------------------------------
@@ -434,12 +442,18 @@ function main(): void {
     { file: "STM_SA6884_01JAN26_14JUN26.txt", account: "sa-6884" },
   ];
 
+  const balances: { account: string; date: string; balance: number }[] = [];
+
   for (const { file, account } of saFiles) {
     const fp = path.join(STATEMENTS_DIR, file);
     if (!fs.existsSync(fp)) { console.warn(`Missing: ${file}`); continue; }
-    const txs = parseSAFile(fp, account);
+    const { transactions: txs, lastBalance } = parseSAFile(fp, account);
     console.log(`${file}: ${txs.length} transactions`);
     allTransactions.push(...txs);
+    if (lastBalance) {
+      balances.push({ account, ...lastBalance });
+      console.log(`  balance as of ${lastBalance.date}: ${lastBalance.balance.toLocaleString("th-TH")} THB`);
+    }
   }
 
   // Build merchant map from categorized transactions
@@ -452,7 +466,7 @@ function main(): void {
     }
   }
 
-  const draft = { generatedAt: NOW, transactions: allTransactions, merchantMap };
+  const draft = { generatedAt: NOW, transactions: allTransactions, merchantMap, balances };
   fs.writeFileSync(DRAFT_PATH, JSON.stringify(draft, null, 2), "utf-8");
 
   const income = allTransactions.filter((t) => t.direction === "income").reduce((s, t) => s + t.amount, 0);

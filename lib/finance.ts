@@ -18,6 +18,7 @@ const TRANSACTIONS_PATH = "05 Milin/finance-transactions.json";
 const MERCHANT_MAP_PATH = "05 Milin/finance-merchant-map.json";
 const CATEGORIES_PATH = "05 Milin/finance-categories.json";
 const TAX_CONFIG_PATH = "05 Milin/finance-tax.json";
+const BALANCES_PATH = "05 Milin/finance-balances.json";
 
 export type Direction = "income" | "expense";
 
@@ -77,6 +78,13 @@ export interface TaxConfig {
   parentsSupported: number; // parents (self + spouse) you support, 30k each
   /** Manual deduction amounts, keyed by bucket; merged with transaction sums. */
   manualDeductions: Partial<Record<TaxBucket, number>>;
+}
+
+/** Snapshot of an account's running balance as of its latest parsed statement line. */
+export interface AccountBalance {
+  account: string;
+  date: string; // YYYY-MM-DD, last transaction date on the statement
+  balance: number; // THB
 }
 
 export function defaultTaxConfig(): TaxConfig {
@@ -216,6 +224,21 @@ export async function saveTaxConfig(config: TaxConfig, sha?: string): Promise<vo
 }
 
 // ---------------------------------------------------------------------------
+// Account balances (cash on hand, from savings-account statements)
+// ---------------------------------------------------------------------------
+
+export async function getBalances(): Promise<{ items: AccountBalance[]; sha?: string }> {
+  const { data, sha } = await readJsonFile<AccountBalance[]>(BALANCES_PATH, []);
+  return { items: data, sha };
+}
+
+/** Balances are a snapshot keyed by account, not an append log — incoming replaces existing per account. */
+export async function saveBalances(items: AccountBalance[], sha?: string): Promise<void> {
+  const resolvedSha = sha ?? (await readJsonFile<AccountBalance[]>(BALANCES_PATH, [])).sha;
+  await writeJsonFile(BALANCES_PATH, items, resolvedSha);
+}
+
+// ---------------------------------------------------------------------------
 // Merchant normalization + categorization + dedup
 // ---------------------------------------------------------------------------
 
@@ -305,4 +328,18 @@ export function summarize(transactions: Transaction[]): PeriodSummary {
 /** THB formatting helper for UI + chat. */
 export function formatTHB(amount: number): string {
   return amount.toLocaleString("th-TH", { maximumFractionDigits: 0 }) + " ฿";
+}
+
+export interface CashInHand {
+  total: number;
+  /** Oldest of the per-account snapshot dates — the total is only as fresh as its stalest account. */
+  asOf: string;
+  accounts: AccountBalance[];
+}
+
+/** Sum cash-account balances; only meaningful for savings/checking, not credit cards (debt, not cash). */
+export function cashInHand(balances: AccountBalance[]): CashInHand {
+  const total = balances.reduce((sum, b) => sum + b.balance, 0);
+  const asOf = balances.length ? [...balances].sort((a, b) => a.date.localeCompare(b.date))[0].date : "";
+  return { total, asOf, accounts: balances };
 }
